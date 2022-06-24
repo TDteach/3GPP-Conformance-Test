@@ -1,3 +1,4 @@
 allennlp[all]
 allennlp-models
+cached-path==1.1.2
 
