@@ -1,0 +1,35 @@
+When a partial native EPS security context is taken into use through a security mode control procedure, the MME and the UE shall delete the previously current EPS security context.
+
+Except the messages listed below, no NAS signaling messages shall be processed by the receiving EMM entity in the UE or forwarded to the ESM entity, unless the network has established secure exchange of NAS messages for the NAS signaling connection.
+
+Once the secure exchange of NAS messages has been established, the receiving EMM or ESM entity in the UE shall not process any NAS signaling messages unless they have been successfully integrity checked by the NAS.
+
+If NAS signalling messages, having not successfully passed the integrity check, are received, then the NAS in the UE shall discard that message.
+
+If any NAS signaling message is received as not integrity protected even though the secure exchange of NAS messages has been established by the network, then the NAS shall discard this message.
+
+Once the encryption of NAS messages has been started between the MME and the UE, the receiver shall discard the unciphered NAS messages which shall have been ciphered according to the rules described in this specification.
+
+If an ATTACH REJECT message including timer T3402 value different from "deactivated", was received integrity protected, the UE shall apply this value until a new value is received with integrity protection or a new PLMN is selected.
+
+Otherwise, the default value of this timer is used.
+
+Upon receipt of an AUTHENTICATION REJECT message, if the message is received without integrity protection, the UE shall start timer T3247 with a random value uniformly drawn from the range between 30 minutes and 60 minutes, if the timer if not running.
+
+Specifically, for a given EPS security context, a given NAS COUNT value shall be accepted at most one time and only if message integrity verifies correctly.
+
+If, during an ongoing attach or tracking area updating procedure, the SECURITY MODE COMMAND message includes a HASHMME, the UE shall compare HASHMME with a hash value locally calculated as described in 3GPP TS 33.401 [19] from the entire plain ATTACH REQUEST or TRACKING AREA UPDATE REQUEST message that the UE had sent to initiate the procedure.
+
+If HASHMME and the locally calculated hash value are different, the UE shall include the complete ATTACH REQUEST or TRACKING AREA UPDATE REQUEST message which the UE had previously sent in the Replayed NAS message container IE of the SECURITY MODE COMPLETE message.
+
+If the UE finds that the "separation bit" in the AMF field of AUTN supplied by the core network is 0, the UE shall send an AUTHENTICATION FAILURE message to the network, with the EMM cause #26 “non-EPS authentication unacceptable" (see subclause 6.1.1 in 3GPP TS 33.401 [19]).
+
+When a partial native EPS security context is taken into use through a security mode control procedure, the MME and the UE shall delete the previously current EPS security context.
+
+If an ATTACH REJECT message including timer T3402 value different from "deactivated", was received integrity protected, the UE shall apply this value until a new value is received with integrity protection or a new PLMN is selected.
+
+Otherwise, the default value of this timer is used.
+
+Once the encryption of NAS messages has been started between the MME and the UE, the receiver shall discard the unciphered NAS messages which shall have been ciphered according to the rules described in this specification.
+
+Specifically, for a given EPS security context, a given NAS COUNT value shall be accepted at most one time and only if message integrity verifies correctly.

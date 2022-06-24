@@ -1,0 +1,3 @@
+allennlp[all]
+allennlp-models
+
