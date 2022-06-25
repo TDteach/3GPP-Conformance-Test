@@ -1,0 +1,3 @@
+deal with hyphen:
+    treat a-b as one word instead of two words, cooperating with allennlp
+
