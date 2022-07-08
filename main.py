@@ -7,10 +7,11 @@ import copy
 nlp = spacy.load('en_core_web_md')
 nlp.add_pipe('benepar', config={'model': 'benepar_en3_large'})
 
-data_file = 'toTD_single_sentence_in_24.301_v1.txt'
-out_file = 'haha.txt'
+data_dir = 'data'
+in_file = 'toTD_single_sentence_in_24.301_v2.txt'
+out_file = 'fromTD_single_sentence_in_24.301_v2.txt'
 
-pre_words = ['if', 'upon', 'on', 'when', 'once', 'after', 'unless', 'while', 'whilst']
+pre_words = ['if', 'upon', 'on', 'when', 'once', 'after', 'unless', 'while', 'whilst', 'only']
 aft_words = ['before']
 eql_words = ['via', 'through', 'by']
 
@@ -160,21 +161,30 @@ class Graph:
 
 
 def main():
-    sent_list = list()
 
-    data_path = os.path.join('data', data_file)
+    out_path = os.path.join(data_dir, out_file)
+    os.system('rm -rf '+out_path)
+
+    sent_list = list()
+    sent_id_list = list()
+    data_path = os.path.join(data_dir, in_file)
     with open(data_path, 'r') as f:
         for line in f:
             if line.startswith('---'): continue
-            sent_list.append(line.strip())
+            cont = line.strip()
+            r = cont.find('}')
+            sent_id = int(cont[1:r])
+            sent_id_list.append(sent_id)
+            cont = cont[r+2:]
+            sent_list.append(cont)
 
-    for sent in sent_list:
+    for sid, sent in zip(sent_id_list, sent_list):
         GG = Graph()
         benepar_constituency_parsing(GG, sent)
 
         if len(GG.edge_dict) > 0:
-            with open(out_file, 'a') as f:
-                f.write('****************************' + '\n')
+            with open(out_path, 'a') as f:
+                f.write('{%d}'%sid + '****************************' + '\n')
                 f.write(sent + '\n')
                 for nd in GG.node_list:
                     f.write(str(nd.id) + ' ' + str(nd) + '\n')
@@ -183,7 +193,6 @@ def main():
 
 
 if __name__ == '__main__':
-    os.system('rm haha.txt')
     main()
     exit(0)
 
@@ -202,6 +211,11 @@ if __name__ == '__main__':
     # st = 'the procedures described in the following subclauses can only be executed.'
     # st = 'Before security can be activated, the MME and the UE need to establish an EPS security context.'
     # st = 'When a partial native EPS security context is taken into use through a security mode control procedure, the MME and the UE shall delete the previously current EPS security context.'
+    # st = 'Specifically, for a given EPS security context, a given NAS COUNT value shall be accepted at most one time and only if message integrity verifies correctly.'
+    # st = 'This IE is included in the message when the UE wishes to transmit (protocol) data (e.g. configuration parameters, error codes or messages/events) to the UE and the extended protocol configuration options is supported by both the UE and the network end-to-end for the PDN connection (see subclause 6.6.1.1).'
+    st = 'This IE is included in the message, when the UE wishes to transmit (protocol) data (e.g. configuration parameters, error codes or messages/events) to the UE and the extended protocol configuration options is supported by both the UE and the network end-to-end for the PDN connection (see subclause 6.6.1.1),.'
     GG = Graph()
     benepar_constituency_parsing(GG, st)
+    for nd in GG.node_list:
+        print(str(nd.id) + ' ' + str(nd) + '\n')
     print(GG.edge_dict)
