@@ -154,7 +154,7 @@ def stanza_deal_sent(tokens):
             wd.feats = 'Number=Plur'
     rst = nlp2(doc)
 
-    print(rst)
+    # print(rst)
 
     return rst
 
@@ -392,9 +392,9 @@ def build_srl_tree(l, r, root, verb_dicts, tokens):
             verb_dict['sub_spans'].append((tuple(cut_span), tags[cut_span[0]]))
             span_dict[tuple(cut_span)] = None
 
-    # print(l, r)
-    # print(span_dict)
-    # print(b)
+    print(l, r)
+    print(span_dict)
+    print(b)
     for span in span_dict:
         nd = build_node(span)
         span_dict[span] = build_srl_tree(span[0], span[1], nd, verb_dicts, tokens)
@@ -505,8 +505,8 @@ def deal_one_sent(sent):
         for span in cluster:
             coref_lab[span[0]] = cluster[0][0]
 
-    for i in range(len(tokens)):
-        print(i, coref_lab[i], ':', span_text_map[i])
+    # for i in range(len(tokens)):
+    #     print(i, coref_lab[i], ':', span_text_map[i])
     print('*********************coreference resolution inference end***********************')
 
     print('*********************replace coreferred phrase start***********************')
