@@ -2,6 +2,8 @@ import json
 import numpy as np
 from sklearn import metrics
 from sentence_transformers import SentenceTransformer, util
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+import torch
 
 
 # model = SentenceTransformer("GPL/quora-msmarco-distilbert-gpl")  #0.899
@@ -33,6 +35,69 @@ from sentence_transformers import SentenceTransformer, util
 
 test_file = 'toTD_similarity_testing_data.v1'
 
+def calc_t5_auc(return_fps=False):
+    line_list = list()
+    with open(test_file,'r') as f:
+        for line in f:
+            line_list.append(line.strip())
+
+    nline = len(line_list)
+    sentences1 = [line_list[i] for i in range(0,nline,2)]
+    sentences2 = [line_list[i] for i in range(1,nline,2)]
+    npairs = len(sentences2)
+
+    case_list = list()
+    for i in range(npairs):
+        for j in range(npairs):
+            s1 = sentences1[i]
+            s2 = sentences2[j]
+            case = 'stsb sentence1: '+s1+'.  sentence2: '+s2+'.'
+            case_list.append(case)
+
+    tokenizer = T5Tokenizer.from_pretrained("t5-large")
+    device='cuda:0'
+    model = T5ForConditionalGeneration.from_pretrained("t5-large")
+    model = model.to(device)
+
+    scores = list()
+    batch_size = 100
+    for i in range(0, len(case_list), batch_size):
+        encoding = tokenizer(
+            case_list[i:i+batch_size],
+            padding="longest",
+            max_length=512,
+            truncation=True,
+            return_tensors="pt",
+        )
+        input_ids, attention_mask = encoding.input_ids, encoding.attention_mask
+
+        input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
+
+        outputs = model.generate(input_ids=input_ids, attention_mask=attention_mask, do_sample=False)
+        scs = tokenizer.batch_decode(outputs)
+
+        for  sc in scs:
+            st = sc.find('>')
+            ed = sc.find('<',st)
+            sc=sc[st+2:ed]
+            scores.append(float(sc))
+
+    score_mat = np.zeros([100,100])
+    k = 0
+    for i in range(npairs):
+        for j in range(npairs):
+            score_mat[i][j] = scores[k]
+            k += 1
+
+    label_mat = compare_fps_data_list()
+    ret = evaluate_btw_mats(score_mat, label_mat, sentences1, sentences2, return_fps)
+    return ret
+
+
+
+
+
 def calc_auc(model, return_fps=False):
     line_list = list()
     with open(test_file,'r') as f:
@@ -51,12 +116,20 @@ def calc_auc(model, return_fps=False):
 
     label_mat = compare_fps_data_list()
 
+    ret = evaluate_btw_mats(cosine_scores, label_mat, sentences1, sentences2, return_fps)
+    return ret
+
+
+def evaluate_btw_mats(cosine_scores, label_mat, sentences1, sentences2, return_fps=False):
+
+    npairs = len(cosine_scores)
+
     # for i in range(len(sentences1)):
     #     print("{} \t\t {} \t\t Score: {:.4f}".format(sentences1[i], sentences2[i], cosine_scores[i][i]))
     scores = list()
     labels = list()
     for i in range(npairs):
-        for j in range(i+1):
+        for j in range(npairs):
             scores.append(cosine_scores[i][j])
             labels.append(label_mat[i][j] > 0)
     scores, labels = np.asarray(scores), np.asarray(labels)
@@ -90,7 +163,7 @@ def calc_auc(model, return_fps=False):
     fps_list = list()
     cc = 0
     for i in range(npairs):
-        for j in range(i):
+        for j in range(npairs):
             if cosine_scores[i][j] > thr and label_mat[i][j] < 0:
                 cc += 1
                 rst = {
@@ -125,7 +198,7 @@ def read_fps_data(file_path):
         i = int(line1[1:line1.find(']')])
         j = int(line2[1:line2.find(']')])
         label_mat[i][j] = 1
-        label_mat[j][i] = 1
+        label_mat[j][i] = -1
 
     return label_mat
 
@@ -177,11 +250,14 @@ def compare_fps_data_list():
 
 
 if __name__ == '__main__':
+    #calc_t5_auc(return_fps=False)
+    #exit(0)
+
     model_path_list = list()
     model_path_list.append('stsb-distilbert-base')
-    for i in range(1,14+1):
-        model_path = 'output/3GPP/{}0000'.format(i)
-        model_path_list.append(model_path)
+    #for i in range(1,14+1):
+    #    model_path = 'output/3GPP/{}0000_distilbert'.format(i)
+    #    model_path_list.append(model_path)
     model_path_list.append("GPL/quora-tsdae-msmarco-distilbert-margin-mse")
     model_path_list.append("GPL/scidocs-tsdae-msmarco-distilbert-margin-mse")
     model_path_list.append('distilbert-base-nli-stsb-mean-tokens')
@@ -197,7 +273,7 @@ if __name__ == '__main__':
         rst_list.append((i,auc))
         print('[',i,']-------------------------------------')
 
-    model = SentenceTransformer(model_path_list[-2])
+    model = SentenceTransformer(model_path_list[0])
     auc, fps_list = calc_auc(model, return_fps=True)
     with open('fps.txt','w') as f:
         for fps in fps_list:

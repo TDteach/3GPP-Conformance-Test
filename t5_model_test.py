@@ -1,8 +1,11 @@
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 import torch
 
-tokenizer = T5Tokenizer.from_pretrained("t5-3b")
-model = T5ForConditionalGeneration.from_pretrained("t5-3b")
+device='cuda:0'
+
+tokenizer = T5Tokenizer.from_pretrained("t5-large")
+model = T5ForConditionalGeneration.from_pretrained("t5-large")
+
 
 # the following 2 hyperparameters are task-specific
 max_source_length = 512
@@ -38,6 +41,11 @@ labels = target_encoding.input_ids
 # replace padding token id's of the labels by -100 so it's ignored by the loss
 labels = torch.tensor(labels)
 labels[labels == tokenizer.pad_token_id] = -100
+
+model = model.to(device)
+input_ids = input_ids.to(device)
+attention_mask = attention_mask.to(device)
+labels = labels.to(device)
 
 # forward pass
 loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
