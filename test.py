@@ -34,24 +34,17 @@ import torch
 # model = SentenceTransformer('ChrisZeng/electra-large-discriminator-nli-efl-tweeteval')   #0.652
 
 
-init_file = 'toTD_similarity_testing_data.v1'
+init_file = 'toTD_similarity_testing_data.v2'
 
 def calc_t5_auc(return_fps=False):
-    line_list = list()
-    with open(test_file,'r') as f:
-        for line in f:
-            line_list.append(line.strip())
+    sents, hex_id_map, lab_mat = read_data()
 
-    nline = len(line_list)
-    sentences1 = [line_list[i] for i in range(0,nline,2)]
-    sentences2 = [line_list[i] for i in range(1,nline,2)]
-    npairs = len(sentences2)
-
+    nsent = len(sents)
     case_list = list()
-    for i in range(npairs):
-        for j in range(npairs):
-            s1 = sentences1[i]
-            s2 = sentences2[j]
+    for i in range(nsent):
+        for j in range(i):
+            s1 = sents[i]
+            s2 = sents[j]
             case = 'stsb sentence1: '+s1+'.  sentence2: '+s2+'.'
             case_list.append(case)
 
@@ -84,23 +77,42 @@ def calc_t5_auc(return_fps=False):
             sc=sc[st+2:ed]
             scores.append(float(sc))
 
-    score_mat = np.zeros([100,100])
-    k = 0
-    for i in range(npairs):
-        for j in range(npairs):
-            score_mat[i][j] = scores[k]
-            k += 1
+    labels = list()
+    for i in range(nsent):
+        for j in range(i):
+            labels.append(lab_mat[i][j])
 
-    label_mat = compare_fps_data_list()
-    ret = evaluate_btw_mats(score_mat, label_mat, sentences1, sentences2, return_fps)
-    return ret
+    if not return_fps:
+        return calc_auc_on_scores(scores, labels, return_fps=False)
+    else:
+        auc, fps_list = calc_auc_on_scores(scores, labels, return_fps=True)
+        ret_list = list()
+        for k, sc in fps_list:
+            i, j = k_to_pair[k]
+            _dict = {
+                'i':i,
+                'j':j,
+                'i_sent': sents[i],
+                'j_sent': sents[j],
+                'score': sc,
+            }
+            ret_list.append(_dict)
+        return auc, ret_list
 
 
 def read_init_data():
+    label_list = list()
     line_list = list()
     with open(init_file, 'r') as f:
-        for line in f:
-            line_list.append(line.strip())
+        for i, line in enumerate(f):
+            cont = line.strip()
+            if (i+1)%3 == 0:
+                if cont.startswith('same'):
+                    label_list.append(1)
+                else:
+                    label_list.append(0)
+            else:
+                line_list.append(cont)
 
     hex_id_map = dict()
     nsent = 0
@@ -110,6 +122,7 @@ def read_init_data():
             hex_id_map[hex] = nsent
             nsent += 1
 
+    # lab_mat = np.ones([nsent, nsent], dtype=np.int32)*-1
     lab_mat = np.eye(nsent, dtype=np.int32)
     for i in range(0, len(line_list), 2):
         s1 = line_list[i]
@@ -118,8 +131,10 @@ def read_init_data():
         hex2 = hashlib.md5(s2.encode()).hexdigest()
         id1 = hex_id_map[hex1]
         id2 = hex_id_map[hex2]
-        lab_mat[id1][id2] = 1
-        lab_mat[id2][id1] = 1
+        lb = label_list[i//2]
+        lab_mat[id1][id2] = lb
+        lab_mat[id2][id1] = lb
+
 
     sentences = [None] * nsent
     for line in line_list:
@@ -283,13 +298,13 @@ def evaluate_model(model, return_fps=False):
 
 
 if __name__ == '__main__':
-    #calc_t5_auc(return_fps=False)
-    #exit(0)
+    calc_t5_auc(return_fps=False)
+    exit(0)
 
     model_path_list = list()
     model_path_list.append('stsb-distilbert-base')
     #for i in range(1, 14 + 1):
-    #    model_path = 'output/3GPP/{}0000'.format(i)
+    #    model_path = 'output/3GPP/{}0000_distilbert'.format(i)
     #    model_path_list.append(model_path)
     #model_path_list.append("GPL/quora-tsdae-msmarco-distilbert-margin-mse")
     #model_path_list.append("GPL/scidocs-tsdae-msmarco-distilbert-margin-mse")
@@ -306,8 +321,11 @@ if __name__ == '__main__':
         rst_list.append((i, auc))
         print('[', i, ']-------------------------------------')
 
-    model = SentenceTransformer(model_path_list[-1])
+    model = SentenceTransformer(model_path_list[0])
     auc, fps_list = evaluate_model(model, return_fps=True)
+    print('new fps', len(fps_list))
+
+
     with open('fps.txt', 'w') as f:
         for fps in fps_list:
             f.write('[' + str(fps['i']) + ']' + ' ' + fps['i_sent'] + '\n')
