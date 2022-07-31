@@ -1,5 +1,8 @@
 import os
+import sys
+import logging
 import string
+import pickle
 from tqdm import tqdm
 
 import numpy as np
@@ -8,35 +11,65 @@ import json
 import spacy
 import copy
 import torch
+import allennlp
 from allennlp.predictors.predictor import Predictor
 import stanza
 
-PPN_file_path = 'PPN_in_24.301.txt'
-PPN_list = list()
-with open(PPN_file_path, 'r') as f:
-    for line in f:
-        cont = line.strip()
-        PPN_list.append(cont)
-PPN_list = np.asarray(PPN_list)
-a = np.asarray([len(z) for z in PPN_list])
-ord_a = np.flip(np.argsort(a))
-PPN_list = PPN_list[ord_a]
+import networkx as nx
+from graph import Graph
+from graph import edge_to_string, node_to_string
 
-PUNCT_set = set(string.punctuation)
+os.environ['ALLENNLP_LOG_LEVEL'] = 'ERROR'
+stanza.logger.setLevel(logging.ERROR)
+logging.root.setLevel(logging.ERROR)
+# stdoutf = open('/dev/null', 'w')
+# sys.stdout = stdoutf
 
-nn_to_ving_file_path = 'noun_to_verbing.json'
-with open(nn_to_ving_file_path) as f:
-    NN_VING_map = json.load(f)
 
-print('PPN_list, PUNCT_set and NN_VING_map loaded!')
+PPN_list, PUNCT_set = None, None
 
-srl_predictor = Predictor.from_path(
-    "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz",
-    cuda_device=torch.cuda.current_device(),
-)
+def load_PPN_PUNCT():
+    PPN_file_path = 'PPN_in_24.301.txt'
+    PPN_list = list()
+    with open(PPN_file_path, 'r') as f:
+        for line in f:
+            cont = line.strip()
+            PPN_list.append(cont)
+    PPN_list = np.asarray(PPN_list)
+    a = np.asarray([len(z) for z in PPN_list])
+    ord_a = np.flip(np.argsort(a))
+    PPN_list = PPN_list[ord_a]
 
+    PUNCT_set = set(string.punctuation)
+
+    print('PPN_list and PUNCT_set are loaded!')
+    return PPN_list, PUNCT_set
+
+
+NN_VING_map = None
+
+def load_NN_VING():
+    nn_to_ving_file_path = 'noun_to_verbing.json'
+    with open(nn_to_ving_file_path) as f:
+        NN_VING_map = json.load(f)
+
+    print('NN_VING_map is loaded!')
+    return NN_VING_map
+
+
+srl_predictor = None
+
+def load_srl_predictor():
+    predictor = Predictor.from_path(
+        "https://storage.googleapis.com/allennlp-public-models/structured-prediction-srl-bert.2020.12.15.tar.gz",
+        cuda_device=torch.cuda.current_device(),
+    )
+    return predictor
 
 def semantic_role_labeling(tokens):
+    global srl_predictor
+    if srl_predictor is None:
+        srl_predictor = load_srl_predictor()
     rst = srl_predictor.predict_tokenized(
         tokenized_sentence=tokens,
         # sentence="Did Uriah honestly think he could beat the game in under three hours?."
@@ -44,13 +77,19 @@ def semantic_role_labeling(tokens):
     return rst
 
 
-coref_predictor = Predictor.from_path(
-    "https://storage.googleapis.com/allennlp-public-models/coref-spanbert-large-2021.03.10.tar.gz",
-    cuda_device=torch.cuda.current_device(),
-)
+coref_predictor = None
 
+def load_coref_predictor():
+    predictor = Predictor.from_path(
+        "https://storage.googleapis.com/allennlp-public-models/coref-spanbert-large-2021.03.10.tar.gz",
+        cuda_device=torch.cuda.current_device(),
+    )
+    return predictor
 
 def coreference_resolution_inference(tokens):
+    global coref_predictor
+    if coref_predictor is None:
+        coref_predictor = load_coref_predictor()
     rst = coref_predictor.predict_tokenized(
         tokens,
         # tokenized_sentence=tokens,
@@ -67,12 +106,22 @@ def coreference_resolution_inference(tokens):
 #     build_graph(graph, root)
 
 # nlp0 = stanza.Pipeline('en', processors='tokenize')
-nlp1 = stanza.Pipeline('en', processors='tokenize,mwt,pos', tokenize_pretokenized=True)
-nlp2 = stanza.Pipeline('en', processors='lemma, depparse', lemma_pretagged=True, depparse_pretagged=True,
-                       tokenize_pretokenized=True)
+nlp1 = None
+nlp2 = None
+def load_nlp1():
+    nlp1 = stanza.Pipeline('en', processors='tokenize,mwt,pos, constituency', tokenize_pretokenized=True)
+    return nlp1
+def load_nlp2():
+    nlp2 = stanza.Pipeline('en', processors='lemma, depparse', lemma_pretagged=True, depparse_pretagged=True,
+                           tokenize_pretokenized=True)
+    return nlp2
 
 
 def my_tokenizer(sent):
+    global PPN_list, PUNCT_set
+    if PPN_list is None or PUNCT_set is None:
+        PPN_list, PUNCT_set = load_PPN_PUNCT()
+
     a = [(0, len(sent))]
     la = [0]
     for ppn in PPN_list:
@@ -89,7 +138,7 @@ def my_tokenizer(sent):
                 b.append((s, z))
                 lb.append(0)
                 last_s = 0
-                if sent[z + len(ppn)] == 's':
+                if z + len(ppn) < len(sent) and sent[z + len(ppn)] == 's':
                     last_s = 1
                 b.append((z, z + len(ppn) + last_s))
                 lb.append(1)
@@ -122,6 +171,9 @@ def my_tokenizer(sent):
 
 
 def exchange_nn_with_ving(sent, tokens):
+    global NN_VING_map
+    if NN_VING_map is None:
+        NN_VING_map = load_NN_VING()
     i = 0
     a = list()
     ntokens = list()
@@ -138,8 +190,14 @@ def exchange_nn_with_ving(sent, tokens):
     return nsent, ntokens
 
 
-def stanza_deal_sent(tokens):
+def stanza_deal_sent(tokens, only_nlp1=False):
+    global nlp1
+    if nlp1 is None:
+        nlp1 = load_nlp1()
     doc = nlp1([tokens])
+
+    if only_nlp1:
+        return doc
 
     words = doc.sentences[0].words
     for wd in words:
@@ -152,9 +210,11 @@ def stanza_deal_sent(tokens):
             wd.upos = 'PROPN'
             wd.xpos = 'NNPS'
             wd.feats = 'Number=Plur'
-    rst = nlp2(doc)
 
-    # print(rst)
+    global nlp2
+    if nlp2 is None:
+        nlp2 = load_nlp2()
+    rst = nlp2(doc)
 
     return rst
 
@@ -163,14 +223,16 @@ def stanza_deal_sent(tokens):
 # in_file = 'toTD_single_sentence_in_24.301_v5.txt'
 # out_file = 'fromTD_single_sentence_in_24.301_v5.txt'
 data_dir = '.'
-in_file = 'toTD_test_sentences_v3.txt'
-out_file = 'fromTD_test_sentences_v3.txt'
+in_file = 'toTD_single_sentence_in_24.301_v5.txt'
+out_file = 'fromTD_single_sentence_in_24.301_v5.txt'
 
 be_words = ['is', 'am', 'are', 'was', 'were', 'be', 'been']
 have_words = ['have', 'has', 'had']
-pre_words = ['if', 'upon', 'on', 'when', 'once', 'after', 'unless', 'while', 'whilst', 'only']
+pre_words = ['if', 'upon', 'on', 'when', 'once', 'after', 'unless', 'while', 'whilst', 'only', 'via', 'through', 'by']
 aft_words = ['before']
-eql_words = ['via', 'through', 'by']
+
+
+# eql_words = ['via', 'through', 'by']
 
 
 class Node:
@@ -260,7 +322,7 @@ def dfs_parsing_tree(pt, node_dict):
         pass
     else:
         if len(conj_word_list) > 1:
-            print('ATTENTION!!!', conj_word_list)
+            logging.warning('ATTENTION!!!', conj_word_list)
             pass
         nd['conj_type'] = conj_word_list[0]['upos']
         nd['conj_word'] = conj_word_list[0]['lemma']
@@ -289,7 +351,6 @@ def dfs_parsing_tree(pt, node_dict):
                 nt]: continue  # exclude non-verb and non-be-verb
             deprel = node_dict[nt]['deprel']
             if deprel.split(':')[0] in ['csubj', 'nsubj', 'conj', 'cop']: continue  # exclude subjectional verb
-            # print('--------------', nt, rst_nodes[k])
             if node_dict[nt]['conj_type'] == 'SCONJ':
                 cond_list.append(rst_node_dict[nt])
             elif node_dict[nt]['conj_type'] == 'CCONJ':
@@ -333,49 +394,132 @@ def flatten_relation_tree(node):
     for nd in node.next:
         rst_list.append(flatten_relation_tree(nd))
 
-    _dfs_rst = list()
-    def _dfs_list(i, pre):
-        if i >= len(rst_list):
-            #to do remove replacement
-            _dfs_rst.append(pre)
-            return
-        for z in rst_list[i]:
-            zz = pre.copy()
-            zz.extend(z)
-            _dfs_list(i + 1, zz)
-
     if node.type == 'ITEM' or node.type == 'AND':
-        _dfs_list(0, list())
-        ret_list = _dfs_rst
+        ret_list = and_flatten_or_and_list(rst_list)
         if node.type == 'ITEM':
             for ret in ret_list:
                 ret.append(node)
     elif node.type == 'OR':
-        z = list()
-        for rst in rst_list:
-            z.extend(rst)
-        ret_list = z
+        ret_list = or_flatten_or_and_list(rst_list)
     else:
         raise NotImplementedError
 
     return ret_list
 
 
-def build_srl_tree(l, r, root, verb_dicts, tokens):
+def split_main_part(verb_dict, tokens):
+    main_tags = list()
+    main_tokens = list()
+    tags = verb_dict['tags']
+    for k in verb_dict['main_part']:
+        stag = tags[k].split('-')[-1]
+        main_tags.append(stag)
+        main_tokens.append(tokens[k])
 
+    ARGN = list()
+    for i in range(5):
+        ARGN.append('ARG' + str(i))
+
+    n = len(main_tags)
+    stag_loc_map = dict()
+    for i in range(n):
+        stag = main_tags[i]
+        if stag in ARGN:
+            if stag not in stag_loc_map:
+                stag_loc_map[stag] = [i, i]
+            if stag_loc_map[stag][1] + 1 < i:
+                raise NotImplementedError
+            stag_loc_map[stag][1] = i
+
+    temp = list()
+    i = 0
+    while i < n:
+        stag = main_tags[i]
+        if stag in ARGN:
+            i = stag_loc_map[stag][1]
+            temp.append('[' + stag + ']')
+        else:
+            temp.append(main_tokens[i])
+        i += 1
+    temp = ' '.join(temp)
+
+    print(temp)
+
+    for stag in stag_loc_map:
+        _span = stag_loc_map[stag]
+        _tokens = main_tokens[_span[0]:_span[1] + 1]
+        print(_tokens)
+        doc = stanza_deal_sent(_tokens, only_nlp1=True)
+        tree = doc.sentences[0].constituency
+        conj = None
+        non_conj_child = list()
+        for ch in tree.children[0].children:
+            if ch.label == 'CC':
+                conj = ch.label
+            else:
+                non_conj_child.append(ch)
+        if conj is None:
+            stag_loc_map[stag] = ('and', [' '.join(_tokens)])
+        else:
+            _list = list()
+            for ch in non_conj_child:
+                words = ch.leaf_labels()
+                _list.append(' '.join(words))
+            if conj.lower() == 'and':
+                conj = 'and'
+            else:
+                conj = 'or'
+            stag_loc_map[stag] = (conj, _list)
+
+    main_list = [[temp]]
+    for stag in stag_loc_map:
+        stag_temp = '[' + stag + ']'
+        conj, _list = stag_loc_map[stag]
+        if conj == 'and':
+            new_main_list = list()
+            for and_list in main_list:
+                new_and_list = list()
+                for it in and_list:
+                    for z in _list:
+                        new_and_list.append(it.replace(stag_temp, z))
+                new_main_list.append(new_and_list)
+            main_list = new_main_list
+        else:
+            new_main_list = list()
+            for and_list in main_list:
+                for z in _list:
+                    new_and_list = list()
+                    for it in and_list:
+                        new_and_list.append(it.replace(stag_temp, z))
+                    new_main_list.append(new_and_list)
+            main_list = new_main_list
+
+    return main_list
+
+
+def build_srl_tree(l, r, root, verb_dicts, tokens):
     a = [0] * len(tokens)
-    b = list()
+    verb_list = list()
     for verb_dict in verb_dicts:
         verb_k = verb_dict['verb_k']
+        if len(verb_dict['main_part']) == 1: continue
         if verb_k < l or verb_k >= r: continue
         if a[verb_k] == 1: continue
         for k in verb_dict['related_words']: a[k] = 1
         for k in verb_dict['main_part']: a[k] = 1
-        b.append(verb_dict)
-    b.sort(key=lambda z: z['verb_k'])
+        verb_list.append(verb_dict)
+    verb_list.sort(key=lambda z: z['verb_k'])
+
+    for verb_dict in verb_list:
+        main_list = split_main_part(verb_dict, tokens)
+        verb_dict['main_list'] = main_list
+        print("xyyyyyyyyyyyyyyyyyyy")
+        print(verb_dict['description'])
+        print(main_list)
+        print("xyyyyyyyyyyyyyyyyyyy")
 
     span_dict = dict()
-    for verb_dict in b:
+    for verb_dict in verb_list:
         tags = verb_dict['tags']
         cut_span = None
         verb_dict['sub_spans'] = list()
@@ -394,24 +538,31 @@ def build_srl_tree(l, r, root, verb_dicts, tokens):
 
     print(l, r)
     print(span_dict)
-    print(b)
+    print(verb_list)
     for span in span_dict:
+        if span[0] + 1 >= span[1]: continue
         nd = build_node(span)
         span_dict[span] = build_srl_tree(span[0], span[1], nd, verb_dicts, tokens)
 
     c = list()
-    for verb_dict in b:
+    for verb_dict in verb_list:
         nd = build_node(verb_dict['desp'])
+        nd.next = list()
         nd.tags = list()
+        nd.span_first_word = list()
+        nd.ref = verb_dict['description']
+        nd.main_list = verb_dict['main_list']
         for span, tag in verb_dict['sub_spans']:
-            nd.next.append(span_dict[span])
-            nd.tags.append(tag)
+            if span_dict[span] is not None:
+                nd.next.append(span_dict[span])
+                nd.tags.append(tag)
+                nd.span_first_word.append(tokens[span[0]].lower())
         c.append(nd)
     root.next = c
 
-    if len(b) > 0:
+    if len(verb_list) > 0:
         root_type = 'OR'
-        for verb_dict in b[:0:-1]:
+        for verb_dict in verb_list[:0:-1]:
             k = verb_dict['verb_k'] - 1
             while k >= 0 and (a[k] == 1 or tokens[k].lower() not in ['and', 'or', 'nor', ',']):
                 k -= 1
@@ -426,30 +577,166 @@ def build_srl_tree(l, r, root, verb_dicts, tokens):
                 else:
                     pass
         root.type = root_type
-    else:
-        root.desp = list(range(root.desp[0], root.desp[1]))
+
+    root.desp = ' '.join(tokens[root.desp[0]:root.desp[1]])
+    # root.desp = list(range(root.desp[0], root.desp[1]))
 
     return root
 
 
-def deal_one_sent(sent):
+def and_flatten_or_and_list(a):
+    gathered_list = list()
+    na = len(a)
+
+    def _dfs_list(i, _pre):
+        if i >= na:
+            # to do remove replacement
+            gathered_list.append(_pre.copy())
+            return
+        for z in a[i]:
+            zz = _pre.copy()
+            zz.extend(z)
+            _dfs_list(i + 1, zz)
+
+    _dfs_list(0, [])
+
+    return gathered_list
+
+
+def or_flatten_or_and_list(a):
+    ret_list = list()
+    for zz in a:
+        ret_list.extend(zz)
+    return ret_list
+
+
+def build_graph_from_srl_tree(node, G, pre_conds=[[]]):
+    if hasattr(node, 'main_list'):
+        ret_list = node.main_list
+    else:
+        ret_list = [[node.desp]]
+    ret_list = and_flatten_or_and_list([ret_list, pre_conds])
+
+    if node.type == 'ITEM':
+        node.has_verb = False
+    else:
+        node.has_verb = True
+
+    if len(node.next) == 0:
+        return ret_list
+
+    rst_list = list()
+    for nd in node.next:
+        rst_list.append(build_graph_from_srl_tree(nd, G, pre_conds))
+        if nd.has_verb:
+            node.has_verb = True
+
+    if node.type == 'ITEM':
+        from_list = list()
+        to_list = list()
+        equ_list = list()
+        for tag, rst, fword, ch in zip(node.tags, rst_list, node.span_first_word, node.next):
+            print(tag)
+            print(rst)
+            if tag == 'B-ARGM-PRP' and ch.has_verb:
+                to_list.append(rst)
+            elif ch.has_verb:
+                from_list.append(rst)
+            else:
+                equ_list.append(rst)
+
+        if len(from_list) > 0:
+            from_list.extend(equ_list)
+            equ_list = list()
+
+        equ_list.append(ret_list)
+        ret_list = and_flatten_or_and_list(equ_list)
+
+        print('from_list:', from_list)
+        print('equ_list:', equ_list)
+        print('to_list:', to_list)
+
+        if len(from_list) > 0:
+            from_list = and_flatten_or_and_list(from_list)
+            for fr in from_list:
+                fr_node = G.add_and_node(fr)
+                for v in ret_list:
+                    for vv in v:
+                        vv_node = G.add_unary_node(vv)
+                        G.add_edge_with_node(fr_node, vv_node, with_sent=node.ref)
+
+        if len(to_list) > 0:
+            to_list = and_flatten_or_and_list(to_list)
+            for v in ret_list:
+                v_node = G.add_and_node(v)
+                for to in to_list:
+                    for tt in to:
+                        to_node = G.add_unary_node(tt)
+                        G.add_edge_with_node(v_node, to_node, with_sent=node.ref)
+    elif node.type == 'AND':
+        ret_list = and_flatten_or_and_list(rst_list)
+    elif node.type == 'OR':
+        ret_list = or_flatten_or_and_list(rst_list)
+    else:
+        raise NotImplementedError
+
+    return ret_list
+
+
+def build_tree_from_sent(sent):
     tokens = my_tokenizer(sent)
     sent, tokens = exchange_nn_with_ving(sent, tokens)
 
-    i = 0
-    wd_st_map = list()
-    wd_ed_map = list()
-    for wd in tokens:
-        while sent[i] != wd[0]: i += 1
-        wd_st_map.append(i)
-        i += len(wd)
-        wd_ed_map.append(i)
+    print('*********************coreference resolution inference start***********************')
+    coref_rst = coreference_resolution_inference(tokens)
+    coref_lab = list(range(len(tokens)))
 
+    def _find_root(ii):
+        if coref_lab[ii] != ii:
+            coref_lab[ii] = _find_root(coref_lab[ii])
+        return coref_lab[ii]
+
+    clusters = coref_rst['clusters']
+    print(clusters)
+    span_text_map = dict()
+    for i in range(len(tokens)):
+        span_text_map[i] = [tokens[i]]
+    for cluster in clusters:
+        for span in cluster:
+            span_text_map[span[0]] = tokens[span[0]:span[1] + 1]
+            for i in range(span[0] + 1, span[1] + 1):
+                coref_lab[_find_root(i)] = _find_root(span[0])
+        for span in cluster:
+            coref_lab[_find_root(span[0])] = _find_root(cluster[0][0])
+
+    for i in range(len(tokens)):
+        print(i, coref_lab[i], ':', span_text_map[i])
+    print('*********************coreference resolution inference end***********************')
+
+    print('*********************replace coreferred phrase start***********************')
+    new_tokens = list()
+    for k in list(range(len(tokens))):
+        k = _find_root(k)
+        if len(new_tokens) == 0 or k != new_tokens[-1]:
+            new_tokens.append(k)
+    z = list()
+    for k in new_tokens:
+        z.extend(span_text_map[k])
+    tokens = z
+    sent = ' '.join(tokens)
+    print(sent)
+    print('*********************replace coreferred phrase end***********************')
 
     print('*********************semantic role labeling start***********************')
     srl_rst = semantic_role_labeling(tokens)
-    # words = srl_rst['words']
     words = tokens
+
+    main_tags = ['V', 'ARGM-MOD',
+                 'ARG0', 'R-ARG0', 'C-ARG0',
+                 'ARG1', 'R-ARG1', 'C-ARG1',
+                 'ARG2', 'R-ARG2', 'C-ARG2',
+                 'ARG3', 'R-ARG3', 'C-ARG3',
+                 ]
 
     verb_dicts = srl_rst['verbs']
     for verb_dict in verb_dicts:
@@ -475,11 +762,12 @@ def deal_one_sent(sent):
                         w_list.append(k - 2)
                     w_list.append(k - 1)
                 w_list.append(k)
-            elif zlb in ['V', 'ARG0', 'R-ARG0', 'ARG1', 'ARG2', 'ARGM-MOD']:
+            elif zlb in main_tags:
                 w_list.append(k)
         verb_dict['verb_k'] = verb_k
         verb_dict['main_part'] = w_list
-        verb_dict['desp'] = w_list.copy()
+        # verb_dict['desp'] = w_list.copy()
+        verb_dict['desp'] = ' '.join([tokens[z] for z in w_list])
 
     print('*********************semantic role labeling end***********************')
 
@@ -490,10 +778,39 @@ def deal_one_sent(sent):
     srl_tree_root = build_srl_tree(0, len(tokens), root, verb_dicts, tokens)
     print('*********************build SRL tree end***********************')
 
+    return srl_tree_root
+
+    rst_list = list()
+    for nd in srl_tree_root.next:
+        cond_list = flatten_relation_tree(nd)
+        rst_list.append((nd, cond_list))
+
+        for cond in cond_list:
+            for cc in cond[:-1]:
+                print(cc)
+            print('>>>>>>>>>>lead to<<<<<<<<<<<<<')
+            print(nd)
+            print('-----------')
+        print('======================')
+
+    return rst_list
+
+    ############################################################################
+    ############################################################################
+    ############################################################################
+
+    '''
     print('*********************coreference resolution inference start***********************')
     coref_rst = coreference_resolution_inference(tokens)
     coref_lab = list(range(len(tokens)))
+
+    def _find_root(i):
+        if coref_lab[i] != i:
+            coref_lab[i] = _find_root(coref_lab[i])
+        return coref_lab[i]
+
     clusters = coref_rst['clusters']
+    print(clusters)
     span_text_map = dict()
     for i in range(len(tokens)):
         span_text_map[i] = tokens[i]
@@ -501,20 +818,15 @@ def deal_one_sent(sent):
         for span in cluster:
             span_text_map[span[0]] = sent[wd_st_map[span[0]]:wd_ed_map[span[1]]]
             for i in range(span[0] + 1, span[1] + 1):
-                coref_lab[i] = span[0]
+                coref_lab[_find_root(i)] = _find_root(span[0])
         for span in cluster:
-            coref_lab[span[0]] = cluster[0][0]
+            coref_lab[_find_root(span[0])] = _find_root(cluster[0][0])
 
-    # for i in range(len(tokens)):
-    #     print(i, coref_lab[i], ':', span_text_map[i])
+    for i in range(len(tokens)):
+        print(i, coref_lab[i], ':', span_text_map[i])
     print('*********************coreference resolution inference end***********************')
 
     print('*********************replace coreferred phrase start***********************')
-
-    def _find_root(i):
-        if coref_lab[i] != i:
-            coref_lab[i] = _find_root(coref_lab[i])
-        return coref_lab[i]
 
     def _list_to_str_with_coreference(w_list):
         n_w_list = list()
@@ -545,7 +857,9 @@ def deal_one_sent(sent):
         # print(tokens[verb_k], ':', verb_desp_map[verb_k])
 
     def _dfs_srl_tree(nd):
-        if nd.type == 'ITEM' and type(nd.desp) is list:
+        print(nd)
+        # if nd.type == 'ITEM' and type(nd.desp) is list:
+        if type(nd.desp) is list:
             nd.desp = _list_to_str_with_coreference(nd.desp)
         for nt in nd.next:
             _dfs_srl_tree(nt)
@@ -553,24 +867,6 @@ def deal_one_sent(sent):
     _dfs_srl_tree(srl_tree_root)
 
     print('*********************replace coreferred phrase end***********************')
-
-    rst_list = list()
-    for nd in srl_tree_root.next:
-        cond_list = flatten_relation_tree(nd)
-        rst_list.append((nd, cond_list))
-
-        for cond in cond_list:
-            for cc in cond[:-1]:
-                print(cc)
-            print('>>>>>>>>>>lead to<<<<<<<<<<<<<')
-            print(nd)
-            print('-----------')
-        print('======================')
-
-    return rst_list
-
-
-
 
     print('*********************align SRL into dependency parsing start***********************')
     stanza_sent = stanza_deal_sent(tokens).sentences[0]
@@ -613,36 +909,91 @@ def deal_one_sent(sent):
             print('-----------')
         print('======================')
 
-    return rst_list
+    return rst_listA
+    # '''
+
+
+def generate_graph_from_paras(para_list):
+    sents_record = dict()
+    G = Graph()
+    for para in tqdm(para_list):
+        u_conds = list()
+        c_conds = list()
+        u_line, c_line = -1, -1
+        for sent in para:
+            sl = sent['num_line']
+            if sl > c_line:
+                u_conds.extend(and_flatten_or_and_list(c_conds))
+                c_conds = list()
+                u_line, c_line = c_line, sl
+
+            hashv = hash(sent['sent'])
+            if hashv not in sents_record:
+                try:
+                    tree_root = build_tree_from_sent(sent['sent'])
+                except:
+                    continue
+                sents_record[hashv] = tree_root
+            else:
+                tree_root = sents_record[hashv]
+
+            rst_list = build_graph_from_srl_tree(tree_root, G, pre_conds=u_conds)
+            c_conds.append(rst_list)
+
+    return G
 
 
 def main():
-    out_path = os.path.join(data_dir, out_file)
-    os.system('rm -rf ' + out_path)
-
     para_list = read_data(in_file)
+    G = generate_graph_from_paras(para_list)
 
-    with open(out_path, 'w') as f:
-        for para in tqdm(para_list):
-            for sent in para:
-                try:
-                    rst_list = deal_one_sent(sent['sent'])
-                except:
-                    continue
-
-                f.write('[[[[[[[[[[[[' + sent['prefix'] + ']]]]]]]]]]]]]' + '\n')
-                f.write(sent['sent'] + '\n')
-                for nd, cond_list in rst_list:
-                    for cond in cond_list:
-                        for cc in cond[:-1]:
-                            f.write(str(cc) + '\n')
-                        f.write('>>>>>>>>>>lead to<<<<<<<<<<<<<' + '\n')
-                        f.write(str(nd) + '\n')
-                        f.write('-----------' + '\n')
-                    f.write('======================' + '\n')
+    with open("graph.pkl", 'wb') as f:
+        pickle.dump(G, f)
+    print("write graph to graph.pkl")
+    # with open("graph.pkl", 'rb') as f:
+    #     G = pickle.load(f)
+    # G.show()
 
 
-def test():
+def visit_prenodes_from_text(text, G):
+    node = G.get_closet_node(text)
+    node_to_string(G, node)
+
+    if node.node_type == 'sentence':
+        n_id = None
+        for ee in G.DG.out_edges(node.n_id):
+            n_id = ee[1]
+            break
+        node = G.node_list[n_id]
+
+    def _show(record_list):
+        print()
+        print()
+        for i in range(len(record_list) - 1, 0, -1):
+            print('-------------------')
+            edge_to_string(G, [record_list[i], record_list[i - 1]])
+            print('-------------------')
+        print()
+        print()
+        print('################################################')
+
+    def _dfs(nid, record_list):
+        record_list.append(nid)
+        in_edge_list = list(G.DG.in_edges(nid))
+        in_nid_list = [ee[0] for ee in in_edge_list]
+        if len(in_nid_list) == 0:
+            _show(record_list)
+            return
+        for nid in in_nid_list:
+            if nid in record_list:
+                continue
+            _dfs(nid, record_list)
+            record_list.pop()
+
+    _dfs(node.n_id, [])
+
+
+def test_single_sentence():
     # sent = 'When D happens or E occurs, MME should do A, remove B and create C'
     # sent = 'If the attach request is neither for emergency bearer services nor for initiating a PDN connection for emergency bearer services with attach type not set to "EPS emergency attach", upon reception of the EMM causes #95, #96, #97, #99 and #111 the UE should set the attach attempt counter to 5.'
 
@@ -664,7 +1015,7 @@ def test():
     # sent = 'Secure exchange of NAS messages via a Vehicle-to-Everything signalling connection is usually established by the MME during the attach procedure by initiating a security mode control procedure. '
     # set secure exchange of NAS message as noun
     # sent = 'In state EMM-DiiiEREGISTERED, the UE initiates the attach procedure by sending an ATTACH REQUEST message to the MME, starting timer T3410 and entering state EMM-REGISTERED-INITIATED.'
-    sent = 'Upon receipt of an AUTHENTICATION REJECT message, if the message is received without integrity protection, the UE shall start timer T3247 with a random value uniformly drawn from the range between 30 minutes and 60 minutes, if the timer is not running.'
+    # sent = 'Upon receipt of an AUTHENTICATION REJECT message, if the message is received without integrity protection, the UE shall start timer T3247 with a random value uniformly drawn from the range between 30 minutes and 60 minutes, if the timer is not running.'
     # to do upon receipt
     # to do coreference resolution
     # sent = 'The UE shall initiate an attach or combined attach procedure on the expiry of timers T3411, T3402 or T3346; '
@@ -672,17 +1023,122 @@ def test():
     # sent = 'The EPS security context is taken into use by the UE and the MME, when the MME initiates a security mode control procedure or during the inter-system handover procedure from A/Gb mode to S1 mode or Iu mode to S1 mode.'
     # sent = 'The MME initiates the NAS security mode control procedure by sending a SECURITY MODE COMMAND message to the UE and starting timer T3460.'
     # to do deal with on the expiry
-    sent = 'When a non-current full native EPS security context is taken into use by a security mode cnotrol procedure, then the MME and the UE shall delete the previously current mapped EPS security context.'
-
-
+    # sent = 'When a non-current full native EPS security context is taken into use by a security mode cnotrol procedure, then the MME and the UE shall delete the previously current mapped EPS security context.'
+    # sent = 'Upon receipt of the IDENTITY REQUEST message the UE shall send an IDENTITY RESPONSE message to the network.'
+    # sent = 'Furthermore, the MME may, send a SERVICE ACCEPT message to complete the service request procedure, if no NAS security mode control procedure was initiated, the MME did not send a SERVICE ACCEPT message as specified above to perform an EPS bearer context status synchronization, and the MME did not initiate any of the procedures specified in item 1 to 4 above.'
+    sent = 'When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.'
 
     # sent = 'If running, the timer should stops.'
     # sent = ' I am a boy who plays football.'
     # sent = 'I am a boy'
-    deal_one_sent(sent)
+    G = Graph()
+    tree_root = build_tree_from_sent(sent)
+    rst_list = build_graph_from_srl_tree(tree_root, G)
+    print(rst_list)
+    exit(0)
+
+
+def test_graph():
+    s1 = {
+        'sent': 'Upon receipt of the IDENTITY REQUEST message from the network, the UE shall send the IDENTITY RESPONSE message.',
+        'num_line': int(1324),
+        'pos_in_line': int(5),
+        'prefix': '{1324, 5}'
+    }
+    s2 = {
+        'sent': 'Upon receipt of the IDENTITY REQUEST message the UE shall send an IDENTITY RESPONSE message to the network.',
+        'num_line': int(1498),
+        'pos_in_line': int(0),
+        'prefix': '{1498, 0}'
+    }
+    s3 = {
+        'sent': 'The number of EPS security contexts that need to be maintained simultaneously by the UE and the MME is limited by the following requirements:',
+        'num_line': int(233),
+        'pos_in_line': int(0),
+        'prefix': '{233, 0}'
+    }
+    s4 = {
+        'sent': "When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.",
+        'num_line': int(233),
+        'pos_in_line': int(0),
+        'prefix': '{233, 0}'
+    }
+    s5 = {
+        'sent': 'The UE shall invoke the service request procedure when, The UE, in EMM-CONNECTED mode and has a NAS signalling connection only, is using EPS services with control plane CIoT EPS optimization and has pending user data to be sent via user plane radio bearers;',
+        'num_line': int(233),
+        'pos_in_line': int(0),
+        'prefix': '{233, 0}'
+    }
+    para_list = [[s1], [s2], [s3], [s4], [s5]]
+
+    G = generate_graph_from_paras(para_list)
+
+    for ee in G.DG.edges:
+        edge_to_string(G, ee)
+        print('-------------------')
+
+    exit(0)
+
+
+def test_paras():
+    fpath = 'test_paras.txt'
+    paras = list()
+    list_paras = list()
+    with open(fpath, 'r') as f:
+        for k, line in enumerate(f):
+            line = line.strip()
+            if line.startswith('-----------'):
+                list_paras.append(paras)
+                paras = list()
+                continue
+            p = {
+                'sent': line,
+                'num_line': int(k),
+                'pos_in_line': int(0),
+                'prefix': '{%d, 0}' % k,
+            }
+            paras.append([p])
+
+    for paras in list_paras:
+        G = generate_graph_from_paras(paras)
+
+        for ee in G.DG.edges:
+            edge_to_string(G, ee)
+            print('-------------------')
     exit(0)
 
 
 if __name__ == '__main__':
-    test()
+    # test_graph()
+    # test_single_sentence()
+    test_paras()
     main()
+
+    with open("graph.pkl", 'rb') as f:
+        G = pickle.load(f)
+
+    text = 'the secure exchange of NAS messages has been established'
+    visit_prenodes_from_text(text, G)
+
+    '''
+    scc_list = list(nx.strongly_connected_components(G.DG))
+    scc_nid_map = dict()
+    for k, scc in enumerate(scc_list):
+        scc_nid_map[k] = list(scc)[0]
+
+    CDG = nx.condensation(G.DG, scc=scc_list)
+    path = nx.dag_longest_path(CDG)
+    for i in range(len(path) - 1):
+        scc1 = scc_list[path[i]]
+        scc2 = scc_list[path[i+1]]
+        found = False
+        for nd1 in scc1:
+            for nd2 in scc2:
+                if (nd1, nd2) in G.edge_reference:
+                    edge_to_string(G, [nd1, nd2])
+                    break
+            if found: break
+
+        print('xxxxxxxxxxxxxxxxxxxxxxx')
+    exit(0)
+    # '''
