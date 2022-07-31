@@ -36,6 +36,7 @@ import torch
 
 init_file = 'toTD_similarity_testing_data.v2'
 
+
 def calc_t5_auc(return_fps=False):
     sents, hex_id_map, lab_mat = read_data()
 
@@ -45,11 +46,11 @@ def calc_t5_auc(return_fps=False):
         for j in range(i):
             s1 = sents[i]
             s2 = sents[j]
-            case = 'stsb sentence1: '+s1+'.  sentence2: '+s2+'.'
+            case = 'stsb sentence1: ' + s1 + '.  sentence2: ' + s2 + '.'
             case_list.append(case)
 
     tokenizer = T5Tokenizer.from_pretrained("t5-large")
-    device='cuda:0'
+    device = 'cuda:0'
     model = T5ForConditionalGeneration.from_pretrained("t5-large")
     model = model.to(device)
 
@@ -57,7 +58,7 @@ def calc_t5_auc(return_fps=False):
     batch_size = 100
     for i in range(0, len(case_list), batch_size):
         encoding = tokenizer(
-            case_list[i:i+batch_size],
+            case_list[i:i + batch_size],
             padding="longest",
             max_length=512,
             truncation=True,
@@ -71,10 +72,10 @@ def calc_t5_auc(return_fps=False):
         outputs = model.generate(input_ids=input_ids, attention_mask=attention_mask, do_sample=False)
         scs = tokenizer.batch_decode(outputs)
 
-        for  sc in scs:
+        for sc in scs:
             st = sc.find('>')
-            ed = sc.find('<',st)
-            sc=sc[st+2:ed]
+            ed = sc.find('<', st)
+            sc = sc[st + 2:ed]
             scores.append(float(sc))
 
     labels = list()
@@ -90,8 +91,8 @@ def calc_t5_auc(return_fps=False):
         for k, sc in fps_list:
             i, j = k_to_pair[k]
             _dict = {
-                'i':i,
-                'j':j,
+                'i': i,
+                'j': j,
                 'i_sent': sents[i],
                 'j_sent': sents[j],
                 'score': sc,
@@ -107,7 +108,7 @@ def read_init_data():
     with open(init_file, 'r') as f:
         for i, line in enumerate(f):
             cont = line.strip()
-            if (i+1)%3 == 0:
+            if (i + 1) % 3 == 0:
                 if cont.startswith('same'):
                     label_list.append(1)
                 else:
@@ -132,10 +133,9 @@ def read_init_data():
         hex2 = hashlib.md5(s2.encode()).hexdigest()
         id1 = hex_id_map[hex1]
         id2 = hex_id_map[hex2]
-        lb = label_list[i//2]
+        lb = label_list[i // 2]
         lab_mat[id1][id2] = lb
         lab_mat[id2][id1] = lb
-
 
     sentences = [None] * nsent
     for line in line_list:
@@ -275,10 +275,78 @@ def read_data():
     return sents, hex_id_map, lab_mat
 
 
+from main import my_tokenizer, semantic_role_labeling
+
+embedding_model = None
+embedding_model_path = 'stsb-distilbert-base'
+def load_embedding_model():
+    embedding_model = SentenceTransformer(embedding_model_path)
+    return embedding_model
+
+
+def calc_embeddings_for_sent(sent=None, tokens=None, tags=None):
+    if sent is None and tokens is None:
+        raise NotImplementedError
+    if tokens is None:
+        tokens = my_tokenizer(sent)
+    if tags is None:
+        srl_rst = semantic_role_labeling(tokens)
+
+        max_verb_dict = None
+        verb_dicts = srl_rst['verbs']
+        for verb_dict in verb_dicts:
+            tags = verb_dict['tags']
+            verb_dict['n_related'] = np.sum([tag != 'O' for tag in tags])
+            if max_verb_dict is None or verb_dict['n_related'] > max_verb_dict['n_related']:
+                max_verb_dict = verb_dict
+        if max_verb_dict is not None:
+            tags = max_verb_dict['tags']
+
+    main_parts = {
+        'V': list(),
+        # 'ARG0': list(),
+        'ARG1': list(),
+        # 'ARG2': list(),
+        # 'ARG3': list(),
+    }
+
+    if tags is not None:
+        for tag, token in zip(tags, tokens):
+            tag = tag.split('-')[-1]
+            if tag in main_parts:
+                main_parts[tag].append(token)
+
+    sent_list = [sent]
+    for part in main_parts:
+        _sent = ' '.join(main_parts[part])
+        sent_list.append(_sent)
+
+    global embedding_model
+    if embedding_model is None:
+        embedding_model = load_embedding_model()
+
+    embedding_list = embedding_model.encode(sent_list, convert_to_tensor=True, normalize_embeddings=True)
+
+    embedding = embedding_list.flatten()
+    embedding = torch.unsqueeze(embedding, 0)
+    return embedding
+
+
+def calc_embedding_for_sent_list(sent_list):
+    emb_list = list()
+    for sent in sent_list:
+        emb_list.append(calc_embeddings_for_sent(sent=sent))
+
+    embeddings = torch.cat(emb_list, dim=0)
+    return embeddings
+
+
+
 def evaluate_model(model, return_fps=False):
     sents, hex_id_map, lab_mat = read_data()
 
-    embeddings = model.encode(sents, convert_to_tensor=True)
+    # embeddings = model.encode(sents, convert_to_tensor=True)
+    embeddings = calc_embedding_for_sent_list(sents)
     scores, labels, k_to_pair = embeddings_to_scores(embeddings, lab_mat)
 
     if not return_fps:
@@ -289,8 +357,8 @@ def evaluate_model(model, return_fps=False):
         for k, sc in fps_list:
             i, j = k_to_pair[k]
             _dict = {
-                'i':i,
-                'j':j,
+                'i': i,
+                'j': j,
                 'i_sent': sents[i],
                 'j_sent': sents[j],
                 'score': sc,
@@ -300,20 +368,20 @@ def evaluate_model(model, return_fps=False):
 
 
 if __name__ == '__main__':
-    #calc_t5_auc(return_fps=False)
-    #exit(0)
+    # calc_t5_auc(return_fps=False)
+    # exit(0)
 
     model_path_list = list()
     model_path_list.append('stsb-distilbert-base')
-    #for i in range(1, 14 + 1):
+    # for i in range(1, 14 + 1):
     #    model_path = 'output/3GPP/{}0000_distilbert'.format(i)
     #    model_path_list.append(model_path)
-    #model_path_list.append("GPL/quora-tsdae-msmarco-distilbert-margin-mse")
-    #model_path_list.append("GPL/scidocs-tsdae-msmarco-distilbert-margin-mse")
-    #model_path_list.append('distilbert-base-nli-stsb-mean-tokens')
-    #model_path_list.append('stsb-mpnet-base-v2')
-    #model_path_list.append('all-distilroberta-v1')
-    #model_path_list.append('all-mpnet-base-v2')
+    # model_path_list.append("GPL/quora-tsdae-msmarco-distilbert-margin-mse")
+    # model_path_list.append("GPL/scidocs-tsdae-msmarco-distilbert-margin-mse")
+    # model_path_list.append('distilbert-base-nli-stsb-mean-tokens')
+    # model_path_list.append('stsb-mpnet-base-v2')
+    # model_path_list.append('all-distilroberta-v1')
+    # model_path_list.append('all-mpnet-base-v2')
 
     rst_list = list()
     for i, model_path in enumerate(model_path_list):
@@ -326,7 +394,6 @@ if __name__ == '__main__':
     model = SentenceTransformer(model_path_list[0])
     auc, fps_list = evaluate_model(model, return_fps=True)
     print('new fps', len(fps_list))
-
 
     with open('fps.txt', 'w') as f:
         for fps in fps_list:
