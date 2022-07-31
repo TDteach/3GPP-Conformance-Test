@@ -100,6 +100,7 @@ def calc_t5_auc(return_fps=False):
         return auc, ret_list
 
 
+
 def read_init_data():
     label_list = list()
     line_list = list()
@@ -172,7 +173,7 @@ def calc_auc_on_scores(scores, labels, return_fps=False):
     k = np.argmin(fpr + 1 - tpr)
     thr = thresholds[k]
 
-    '''
+    #'''
     max_f1 = None
     max_f1_thr = None
     for thr in thresholds:
@@ -182,6 +183,7 @@ def calc_auc_on_scores(scores, labels, return_fps=False):
             max_f1_thr = thr
     thr = max_f1_thr
     #'''
+    print('selected thr is ', thr)
 
     conf_mat = metrics.confusion_matrix(labels, scores > thr)
     print(conf_mat)
@@ -298,8 +300,8 @@ def evaluate_model(model, return_fps=False):
 
 
 if __name__ == '__main__':
-    calc_t5_auc(return_fps=False)
-    exit(0)
+    #calc_t5_auc(return_fps=False)
+    #exit(0)
 
     model_path_list = list()
     model_path_list.append('stsb-distilbert-base')
