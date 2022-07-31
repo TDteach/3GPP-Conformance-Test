@@ -10,7 +10,6 @@ import stanza
 from allennlp.predictors.predictor import Predictor
 from sentence_transformers import SentenceTransformer, util
 
-
 os.environ['ALLENNLP_LOG_LEVEL'] = 'ERROR'
 stanza.logger.setLevel(logging.ERROR)
 logging.root.setLevel(logging.ERROR)
@@ -23,7 +22,7 @@ PPN_list, PUNCT_set = None, None
 def load_PPN_PUNCT():
     PPN_file_path = 'PPN_in_24.301.txt'
     PPN_list = list()
-    with open(PPN_file_path, 'r') as f:
+    with open(PPN_file_path, 'r', encoding='utf8') as f:
         for line in f:
             cont = line.strip()
             PPN_list.append(cont)
