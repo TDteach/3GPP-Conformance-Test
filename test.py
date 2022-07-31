@@ -5,6 +5,7 @@ import hashlib
 from sklearn import metrics
 from sentence_transformers import SentenceTransformer, util
 from transformers import T5Tokenizer, T5ForConditionalGeneration
+from utils import calc_embeddings_for_sent
 import torch
 
 # model = SentenceTransformer("GPL/quora-msmarco-distilbert-gpl")  #0.899
@@ -173,7 +174,7 @@ def calc_auc_on_scores(scores, labels, return_fps=False):
     k = np.argmin(fpr + 1 - tpr)
     thr = thresholds[k]
 
-    #'''
+    '''
     max_f1 = None
     max_f1_thr = None
     for thr in thresholds:
@@ -275,67 +276,10 @@ def read_data():
     return sents, hex_id_map, lab_mat
 
 
-from main import my_tokenizer, semantic_role_labeling
-
-embedding_model = None
-embedding_model_path = 'stsb-distilbert-base'
-def load_embedding_model():
-    embedding_model = SentenceTransformer(embedding_model_path)
-    return embedding_model
-
-
-def calc_embeddings_for_sent(sent=None, tokens=None, tags=None):
-    if sent is None and tokens is None:
-        raise NotImplementedError
-    if tokens is None:
-        tokens = my_tokenizer(sent)
-    if tags is None:
-        srl_rst = semantic_role_labeling(tokens)
-
-        max_verb_dict = None
-        verb_dicts = srl_rst['verbs']
-        for verb_dict in verb_dicts:
-            tags = verb_dict['tags']
-            verb_dict['n_related'] = np.sum([tag != 'O' for tag in tags])
-            if max_verb_dict is None or verb_dict['n_related'] > max_verb_dict['n_related']:
-                max_verb_dict = verb_dict
-        if max_verb_dict is not None:
-            tags = max_verb_dict['tags']
-
-    main_parts = {
-        'V': list(),
-        # 'ARG0': list(),
-        'ARG1': list(),
-        # 'ARG2': list(),
-        # 'ARG3': list(),
-    }
-
-    if tags is not None:
-        for tag, token in zip(tags, tokens):
-            tag = tag.split('-')[-1]
-            if tag in main_parts:
-                main_parts[tag].append(token)
-
-    sent_list = [sent]
-    for part in main_parts:
-        _sent = ' '.join(main_parts[part])
-        sent_list.append(_sent)
-
-    global embedding_model
-    if embedding_model is None:
-        embedding_model = load_embedding_model()
-
-    embedding_list = embedding_model.encode(sent_list, convert_to_tensor=True, normalize_embeddings=True)
-
-    embedding = embedding_list.flatten()
-    embedding = torch.unsqueeze(embedding, 0)
-    return embedding
-
-
-def calc_embedding_for_sent_list(sent_list):
+def calc_embedding_for_sent_list(sent_list, model=model):
     emb_list = list()
     for sent in sent_list:
-        emb_list.append(calc_embeddings_for_sent(sent=sent))
+        emb_list.append(calc_embeddings_for_sent(sent=sent, model=model))
 
     embeddings = torch.cat(emb_list, dim=0)
     return embeddings
@@ -346,7 +290,7 @@ def evaluate_model(model, return_fps=False):
     sents, hex_id_map, lab_mat = read_data()
 
     # embeddings = model.encode(sents, convert_to_tensor=True)
-    embeddings = calc_embedding_for_sent_list(sents)
+    embeddings = calc_embedding_for_sent_list(sents, model=model)
     scores, labels, k_to_pair = embeddings_to_scores(embeddings, lab_mat)
 
     if not return_fps:

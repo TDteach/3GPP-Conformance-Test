@@ -2,12 +2,14 @@ import torch
 import networkx as nx
 import matplotlib.pyplot as plt
 import copy
-from sentence_transformers import SentenceTransformer, util
+from sentence_transformers import util, SentenceTransformer
+from utils import calc_embeddings_for_sent
 
 embedding_model_path = 'stsb-distilbert-base'
+# embedding_model_path = 'stsb-mpnet-base-v2'
 # node_merge_thr = 0.5378
-node_merge_thr = 0.6351
-# node_merge_thr = 0.7
+# node_merge_thr = 0.5852
+node_merge_thr = 0.7
 
 class NodeContent:
     def __init__(self, n_id, text, embedding):
@@ -100,8 +102,9 @@ class Graph:
                 return node
 
         if with_embedding:
-            embedding = self.embedding_model.encode(text, convert_to_tensor=True, normalize_embeddings=True)
-            embedding = torch.unsqueeze(embedding, 0)
+            embedding = calc_embeddings_for_sent(sent=text, model=self.embedding_model)
+            # embedding = self.embedding_model.encode(text, convert_to_tensor=True, normalize_embeddings=True)
+            # embedding = torch.unsqueeze(embedding, 0)
             embedding = embedding.detach().cpu()
         else:
             embedding = None
@@ -195,8 +198,9 @@ class Graph:
         if node is not None:
             return node
 
-        embedding = self.embedding_model.encode(text, convert_to_tensor=True, normalize_embeddings=True)
-        embedding = torch.unsqueeze(embedding, 0)
+        embedding = calc_embeddings_for_sent(sent=text, model=self.embedding_model)
+        # embedding = self.embedding_model.encode(text, convert_to_tensor=True, normalize_embeddings=True)
+        # embedding = torch.unsqueeze(embedding, 0)
         embedding = embedding.detach().cpu()
 
         rst = util.semantic_search(embedding, self.root_embeddings, top_k=1, score_function=util.dot_score)
