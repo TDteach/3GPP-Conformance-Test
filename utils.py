@@ -158,6 +158,30 @@ def my_tokenizer(sent):
             if i < j + 1: tokens.append(wd[i:j + 1])
             for z in range(j + 1, len(wd)): tokens.append(wd[z])
 
+    upper_lab = list()
+    for token in tokens:
+        if (token.isupper() and token != 'I') or (len(token) > 1 and token != 'Is' and token.endswith('s') and token[:-1].isupper()):
+            upper_lab.append(1)
+        else:
+            upper_lab.append(0)
+
+    new_tokens = list()
+    i = 0
+    while i < len(tokens):
+        lab, token = upper_lab[i], tokens[i]
+        if lab == 0:
+            new_tokens.append(token)
+        else:
+            _list = [token]
+            j = i+1
+            while j < len(tokens) and upper_lab[j] == 1:
+                _list.append(tokens[j])
+                j += 1
+            i = j-1
+            new_tokens.append(' '.join(_list))
+        i += 1
+    tokens = new_tokens
+
     return tokens
 
 
@@ -251,8 +275,9 @@ def calc_embeddings_for_sent(sent=None, tokens=None, tags=None, model=None):
         'V': list(),
         # 'ARG0': list(),
         'ARG1': list(),
-        # 'ARG2': list(),
-        # 'ARG3': list(),
+        'ARG2': list(),
+        'ARG3': list(),
+        # 'ARG4': list(),
     }
 
     if tags is not None:
@@ -262,13 +287,23 @@ def calc_embeddings_for_sent(sent=None, tokens=None, tags=None, model=None):
                 main_parts[tag].append(token)
 
     sent_list = [sent]
-    for part in main_parts:
-        _sent = ' '.join(main_parts[part])
-        sent_list.append(_sent)
+    for tag in main_parts:
+        part = main_parts[tag]
+        if len(part) == 0:
+            sent_list.append(sent)
+        else:
+            _sent = ' '.join(part)
+            sent_list.append(_sent)
 
-    embedding_list = model.encode(sent_list, convert_to_tensor=True)
+    embedding_list = model.encode(sent_list, convert_to_tensor=True, normalize_embeddings=True)
+
+    for i, tag in enumerate(main_parts):
+        part = main_parts[tag]
+        if len(part) == 0:
+            embedding_list[i, :] = 0
 
     embedding = embedding_list.flatten()
+    # embedding = torch.mean(embedding_list, 0)
     embedding = torch.unsqueeze(embedding, 0)
     embedding = torch.nn.functional.normalize(embedding)
     return embedding

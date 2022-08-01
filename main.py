@@ -2,6 +2,7 @@ import os
 from utils import *
 from graph import Graph, edge_to_string, node_to_string
 from tqdm import tqdm
+import copy
 
 # data_dir = 'data'
 # in_file = 'toTD_single_sentence_in_24.301_v5.txt'
@@ -201,7 +202,7 @@ def split_main_part(verb_dict, tokens):
         main_tokens.append(tokens[k])
 
     ARGN = list()
-    for i in range(5):
+    for i in range(3):
         ARGN.append('ARG' + str(i))
 
     n = len(main_tags)
@@ -372,15 +373,17 @@ def and_flatten_or_and_list(a):
     gathered_list = list()
     na = len(a)
 
-    def _dfs_list(i, _pre):
+    def _dfs_list(i, record):
         if i >= na:
             # to do remove replacement
-            gathered_list.append(_pre.copy())
+            gathered_list.append(copy.deepcopy(record))
             return
         for z in a[i]:
-            zz = _pre.copy()
-            zz.extend(z)
-            _dfs_list(i + 1, zz)
+            for zz in z:
+                record.append(zz)
+            _dfs_list(i + 1, record)
+            for zz in z:
+                record.pop()
 
     _dfs_list(0, [])
 
@@ -447,6 +450,7 @@ def build_graph_from_srl_tree(node, G, pre_conds=[[]]):
                 for v in ret_list:
                     for vv in v:
                         vv_node = G.add_unary_node(vv)
+                        print(fr_node, '->', vv_node)
                         G.add_edge_with_node(fr_node, vv_node, with_sent=node.ref)
 
         if len(to_list) > 0:
@@ -885,7 +889,7 @@ def test_paras():
 
     for paras in list_paras:
         G = generate_graph_from_paras(paras)
-
+        print('#'*40, 'Graph demonstration','#'*40)
         for ee in G.DG.edges:
             edge_to_string(G, ee)
             print('-------------------')

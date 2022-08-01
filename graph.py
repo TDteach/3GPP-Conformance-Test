@@ -5,10 +5,10 @@ import copy
 from sentence_transformers import util, SentenceTransformer
 from utils import calc_embeddings_for_sent
 
-embedding_model_path = 'stsb-distilbert-base'
-# embedding_model_path = 'stsb-mpnet-base-v2'
+# embedding_model_path = 'stsb-distilbert-base'
+embedding_model_path = 'stsb-mpnet-base-v2'
 # node_merge_thr = 0.5378
-# node_merge_thr = 0.5852
+# node_merge_thr = 0.6141
 node_merge_thr = 0.7
 
 class NodeContent:
