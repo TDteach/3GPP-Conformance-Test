@@ -814,53 +814,23 @@ def test_single_sentence():
     # sent = 'When a non-current full native EPS security context is taken into use by a security mode cnotrol procedure, then the MME and the UE shall delete the previously current mapped EPS security context.'
     # sent = 'Upon receipt of the IDENTITY REQUEST message the UE shall send an IDENTITY RESPONSE message to the network.'
     # sent = 'Furthermore, the MME may, send a SERVICE ACCEPT message to complete the service request procedure, if no NAS security mode control procedure was initiated, the MME did not send a SERVICE ACCEPT message as specified above to perform an EPS bearer context status synchronization, and the MME did not initiate any of the procedures specified in item 1 to 4 above.'
-    sent = 'When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.'
+    # sent = 'When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.'
+
+    sent = 'In state EMM-DEREGISTERED, the UE initiates the attach procedure by sending an ATTACH REQUEST message to the MME, starting timer T3410 and entering state EMM-REGISTERED-INITIATED.'
+    sent = 'Upon expiry of timer T3247, the UE shall initiate an EPS attach procedure or tracking area updating procedure, if still needed, dependent on EMM state and EPS update status, or perform PLMN selection according to 3GPP TS 23.122.'
 
     # sent = 'If running, the timer should stops.'
     # sent = ' I am a boy who plays football.'
     # sent = 'I am a boy'
-    G = Graph()
-    tree_root = build_tree_from_sent(sent)
-    rst_list = build_graph_from_srl_tree(tree_root, G)
-    print(rst_list)
-    exit(0)
-
-
-def test_graph():
-    s1 = {
-        'sent': 'Upon receipt of the IDENTITY REQUEST message from the network, the UE shall send the IDENTITY RESPONSE message.',
-        'num_line': int(1324),
-        'pos_in_line': int(5),
-        'prefix': '{1324, 5}'
+    p = {
+        'sent': sent,
+        'num_line': int(2),
+        'pos_in_line': int(3),
+        'prefix': '{2, 3}',
     }
-    s2 = {
-        'sent': 'Upon receipt of the IDENTITY REQUEST message the UE shall send an IDENTITY RESPONSE message to the network.',
-        'num_line': int(1498),
-        'pos_in_line': int(0),
-        'prefix': '{1498, 0}'
-    }
-    s3 = {
-        'sent': 'The number of EPS security contexts that need to be maintained simultaneously by the UE and the MME is limited by the following requirements:',
-        'num_line': int(233),
-        'pos_in_line': int(0),
-        'prefix': '{233, 0}'
-    }
-    s4 = {
-        'sent': "When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.",
-        'num_line': int(233),
-        'pos_in_line': int(0),
-        'prefix': '{233, 0}'
-    }
-    s5 = {
-        'sent': 'The UE shall invoke the service request procedure when, The UE, in EMM-CONNECTED mode and has a NAS signalling connection only, is using EPS services with control plane CIoT EPS optimization and has pending user data to be sent via user plane radio bearers;',
-        'num_line': int(233),
-        'pos_in_line': int(0),
-        'prefix': '{233, 0}'
-    }
-    para_list = [[s1], [s2], [s3], [s4], [s5]]
-
-    G = generate_graph_from_paras(para_list)
-
+    paras = [[p]]
+    G = generate_graph_from_paras(paras)
+    print('#' * 40, 'Graph demonstration', '#' * 40)
     for ee in G.DG.edges:
         edge_to_string(G, ee)
         print('-------------------')
@@ -897,7 +867,6 @@ def test_paras():
 
 
 if __name__ == '__main__':
-    # test_graph()
     # test_single_sentence()
     test_paras()
     main()

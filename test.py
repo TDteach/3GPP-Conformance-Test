@@ -342,7 +342,7 @@ if __name__ == '__main__':
     auc, fps_list = evaluate_model(model, return_fps=True)
     print('new fps', len(fps_list))
 
-    with open('fps.txt', 'w') as f:
+    with open('fps.txt', 'w', encoding='utf8') as f:
         for fps in fps_list:
             f.write('[' + str(fps['i']) + ']' + ' ' + fps['i_sent'] + '\n')
             f.write('[' + str(fps['j']) + ']' + ' ' + fps['j_sent'] + '\n')

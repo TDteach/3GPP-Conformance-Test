@@ -297,10 +297,10 @@ def calc_embeddings_for_sent(sent=None, tokens=None, tags=None, model=None):
 
     embedding_list = model.encode(sent_list, convert_to_tensor=True, normalize_embeddings=True)
 
-    for i, tag in enumerate(main_parts):
-        part = main_parts[tag]
-        if len(part) == 0:
-            embedding_list[i, :] = 0
+    # for i, tag in enumerate(main_parts):
+    #     part = main_parts[tag]
+    #     if len(part) == 0:
+    #         embedding_list[i, :] = 0
 
     embedding = embedding_list.flatten()
     # embedding = torch.mean(embedding_list, 0)
