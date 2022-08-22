@@ -119,6 +119,7 @@ Mapped security context
 Native EPS security context
 Non-current EPS security context
 Partial native EPS security context
+partial native EPS security context
 Data via MME
 Country
 EHPLMN
