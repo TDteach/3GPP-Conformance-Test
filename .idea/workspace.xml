@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="71dfbb13-ccfc-4e8a-9342-e82767544b8d" name="Default Changelist" comment="" />
+    <list default="true" id="71dfbb13-ccfc-4e8a-9342-e82767544b8d" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/3GPP-Conformance-Test.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/3GPP-Conformance-Test.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/mimic_cosine.py" beforeDir="false" afterPath="$PROJECT_DIR$/mimic_cosine.py" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -10,16 +14,21 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
   <component name="ProjectId" id="2DiwkOzELxVDTFNonj49BqmEOAb" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">
-    <property name="RunOnceActivity.OpenProjectViewOnStart" value="true" />
-    <property name="RunOnceActivity.ShowReadmeOnStart" value="true" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
-  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
+  }
+}</component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
   <component name="SvnConfiguration">
     <configuration />
   </component>
@@ -30,13 +39,12 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1661195354732</updated>
+      <workItem from="1661197035276" duration="570000" />
+      <workItem from="1661197968118" duration="2905000" />
     </task>
     <servers />
   </component>
-  <component name="WindowStateProjectService">
-    <state x="229" y="63" key="SettingsEditor" timestamp="1661195712718">
-      <screen x="0" y="25" width="1440" height="805" />
-    </state>
-    <state x="229" y="63" key="SettingsEditor/0.25.1440.805@0.25.1440.805" timestamp="1661195712718" />
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
   </component>
 </project>

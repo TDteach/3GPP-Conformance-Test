@@ -23,7 +23,7 @@ class CosineMimicLoss(torch.nn.Module):
     def set_predict(self):
         self.train_flag = 0
 
-    def forward(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor):
+    def forward(self, sentence_features, labels=None):
         if self.train_flag == 1:
             return self._forward_mimic_cosine(sentence_features, labels)
         elif self.train_flag == 2:
@@ -34,7 +34,9 @@ class CosineMimicLoss(torch.nn.Module):
             raise NotImplementedError
 
     def _forward(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor):
-        reps = [model(sentence_feature)['sentence_embedding'] for sentence_feature in sentence_features]
+        a = model(sentence_features[0])
+
+        reps = [self.model(sentence_feature)['sentence_embedding'] for sentence_feature in sentence_features]
         assert len(reps) == 2
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
@@ -42,7 +44,7 @@ class CosineMimicLoss(torch.nn.Module):
         return outputs
 
     def _forward_cross_entropy(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor):
-        reps = [model(sentence_feature)['sentence_embedding'] for sentence_feature in sentence_features]
+        reps = [self.model(sentence_feature)['sentence_embedding'] for sentence_feature in sentence_features]
         assert len(reps) == 2
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
@@ -52,7 +54,7 @@ class CosineMimicLoss(torch.nn.Module):
         return loss
 
     def _forward_mimic_cosine(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor):
-        reps = [model(sentence_feature)['sentence_embedding'].data for sentence_feature in sentence_features]
+        reps = [self.model(sentence_feature)['sentence_embedding'].data for sentence_feature in sentence_features]
         assert len(reps) == 2
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
@@ -78,19 +80,22 @@ if __name__ == '__main__':
     model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0)
     torch.save(train_loss, 'haha.pt')
 
-
-
     train_examples = [InputExample(texts=['My first sentence', 'My second sentence'], label=0),
                       InputExample(texts=['Another pair', 'Unrelated sentence'], label=2)]
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
 
-    train_loss = torch.load('haha.pt', map_location=torch.device('cuda'))
+    train_loss = torch.load('haha.pt', map_location=model.device)
     train_loss.set_train_all()
     model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0)
 
-    from sentence_transformers.utils import batch_to_device
+    train_loss = torch.load('haha.pt', map_location=model.device)
+    train_loss.set_predict()
+    model = SentenceTransformer('distilbert-base-nli-mean-tokens')
+    train_loss.model = model
+    from sentence_transformers.util import batch_to_device
+    train_dataloader.collate_fn = model.smart_batching_collate
     for data in train_dataloader:
-        sentence_batch = data
-        features = model.tokenize(sentences_batch)
-        features = batch_to_device(features, train_loss.device)
-        output = train_loss(features)
+        sentence_batch, label = data
+        output = train_loss(sentence_batch)
+        print(output)
+        exit(0)
