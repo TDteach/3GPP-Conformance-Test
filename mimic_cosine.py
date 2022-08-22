@@ -88,3 +88,7 @@ if __name__ == '__main__':
     train_loss.set_train_all()
     model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0)
 
+    import 
+features = self.tokenize(sentences_batch)
+features = batch_to_device(features, device)
+
