@@ -3,6 +3,7 @@ from sentence_transformers import SentenceTransformer, InputExample, models
 from torch.utils.data import DataLoader
 from typing import Iterable, Dict
 from torch import Tensor
+import torch.nn.functional as F
 
 class CosineMimicLoss(torch.nn.Module):
     def __init__(self, model: SentenceTransformer, feature_dim: int):
@@ -41,6 +42,7 @@ class CosineMimicLoss(torch.nn.Module):
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
         outputs = self.classifier(cated_input)
+        outputs = F.softmax(outputs)
         return outputs
 
     def _forward_cross_entropy(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor):
@@ -59,11 +61,14 @@ class CosineMimicLoss(torch.nn.Module):
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
         outputs = self.classifier(cated_input)
-        mimic_value: Tensor = outputs[:, 1]
 
-        cosine_value: Tensor = torch.cosine_similarity(reps[0], reps[1])
+        cosine_value = torch.cosine_similarity(reps[0], reps[1])
+        cosine_value = cosine_value/2.0 + 0.5
+        targets = torch.zeros_like(outputs)
+        targets[:, 0] = 1-cosine_value
+        targets[:, 1] = cosine_value
 
-        loss = torch.nn.functional.mse_loss(mimic_value, cosine_value)
+        loss = F.cross_entropy(outputs, targets)
         return loss
 
 
@@ -77,7 +82,7 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
 
     train_loss.set_train_classifier()
-    model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0)
+    model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0, weight_decay=1e-5)
     torch.save(train_loss, 'haha.pt')
 
     train_examples = [InputExample(texts=['My first sentence', 'My second sentence'], label=0),
