@@ -123,7 +123,7 @@ class myEvaluator(BinaryClassificationEvaluator):
     def __call__(self, model, output_path: str = None, epoch: int = -1, steps: int = -1) -> float:
         ce, acc = self.compute_ce_score(model)
         print('epoch{:d} step{:d}: ce_loss{:.2f}, acc{:.2f}'.format(epoch, steps, ce, acc*100))
-        return ce
+        return -ce
 
     def compute_ce_score(self, model):
         device = model.device
