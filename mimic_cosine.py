@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import os
 
 import torch
 import torch.nn.functional as F
@@ -144,12 +145,14 @@ class myEvaluator(BinaryClassificationEvaluator):
         return float(output_scores)
 
 
-def get_callback_save_fn(loss_model):
+def get_callback_save_fn(loss_model, outpath):
+    folder, fn = os.path.split(outpath)
+    savepath = os.path.join(folder, 'all_part2.pt')
     loss_model.best_score = float('inf')
     def _callback(score, epoch, steps):
         if score < loss_model.best_score:
             loss_model.best_score = score
-            torch.save(loss_model, 'all_part2.pt')
+            torch.save(loss_model, savepath)
     return _callback
 
 
