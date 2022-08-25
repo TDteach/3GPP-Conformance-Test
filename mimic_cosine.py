@@ -111,29 +111,9 @@ class myEvaluator(BinaryClassificationEvaluator):
         assert len(self.sentences1) == len(self.sentences2)
         assert len(self.sentences1) == len(self.labels)
 
-        self.write_csv = write_csv
-        self.name = name
-        self.batch_size = batch_size
-        if show_progress_bar is None:
-            show_progress_bar = (
-                        logger.getEffectiveLevel() == logging.INFO or logger.getEffectiveLevel() == logging.DEBUG)
-        self.show_progress_bar = show_progress_bar
-
-        self.csv_file = "binary_classification_evaluation" + ("_" + name if name else '') + "_results.csv"
-        self.csv_headers = ["epoch", "steps",
-                            "cossim_accuracy", "cossim_accuracy_threshold", "cossim_f1", "cossim_precision",
-                            "cossim_recall", "cossim_f1_threshold", "cossim_ap",
-                            "manhattan_accuracy", "manhattan_accuracy_threshold", "manhattan_f1", "manhattan_precision",
-                            "manhattan_recall", "manhattan_f1_threshold", "manhattan_ap",
-                            "euclidean_accuracy", "euclidean_accuracy_threshold", "euclidean_f1", "euclidean_precision",
-                            "euclidean_recall", "euclidean_f1_threshold", "euclidean_ap",
-                            "dot_accuracy", "dot_accuracy_threshold", "dot_f1", "dot_precision", "dot_recall",
-                            "dot_f1_threshold", "dot_ap"]
-
         self.loss_model = loss_model
 
     def __call__(self, model, output_path: str = None, epoch: int = -1, steps: int = -1) -> float:
-        super().__call__(model, output_path, epoch, steps)
         ce, acc = self.compute_ce_score(model)
         print('epoch{:d} step{:d}: ce_loss{:.2f}, acc{:.2f}'.format(epoch, steps, ce, acc*100))
         return ce
