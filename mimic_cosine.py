@@ -102,7 +102,7 @@ logger = logging.getLogger(__name__)
 class myEvaluator(BinaryClassificationEvaluator):
     def __init__(self, sentences1: List[str], sentences2: List[str], labels: List[int],
                  loss_model: CosineMimicLoss,
-                 name: str = '', batch_size: int = 32, show_progress_bar: bool = False, write_csv: bool = True):
+                 name: str = '', batch_size: int = 32, show_progress_bar: bool = False, write_csv: bool = False):
 
         self.sentences1 = sentences1
         self.sentences2 = sentences2
@@ -110,6 +110,13 @@ class myEvaluator(BinaryClassificationEvaluator):
 
         assert len(self.sentences1) == len(self.sentences2)
         assert len(self.sentences1) == len(self.labels)
+
+        self.write_csv = write_csv
+        self.name = name
+        self.batch_size = batch_size
+        if show_progress_bar is None:
+            show_progress_bar = (logger.getEffectiveLevel() == logging.INFO or logger.getEffectiveLevel() == logging.DEBUG)
+        self.show_progress_bar = show_progress_bar
 
         self.loss_model = loss_model
 
