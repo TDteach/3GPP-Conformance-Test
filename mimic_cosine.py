@@ -92,12 +92,7 @@ class CosineMimicLoss(torch.nn.Module):
             cated_input = cated_input.data
 
         outputs = self.classifier(cated_input)
-
-        if return_reps:
-            return outputs, reps[0], reps[1]
-
         return outputs
-
 
 logger = logging.getLogger(__name__)
 class myEvaluator(BinaryClassificationEvaluator):
@@ -171,4 +166,3 @@ if __name__ == '__main__':
     myevaluator=myEvaluator(['My first sentence'], ['My second sentence'], [0], loss_model=train_loss, batch_size=16)
     callback_fn = get_callback_save_fn(train_loss)
     model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0, output_path='all_part1.pt', evaluator=myevaluator, evaluation_steps=1, callback=callback_fn)
-
