@@ -95,7 +95,10 @@ class CosineMimicLoss(torch.nn.Module):
         outputs = self.classifier(cated_input)
         return outputs
 
+
 logger = logging.getLogger(__name__)
+
+
 class myEvaluator(BinaryClassificationEvaluator):
     def __init__(self, sentences1: List[str], sentences2: List[str], labels: List[int],
                  loss_model: CosineMimicLoss,
@@ -106,9 +109,11 @@ class myEvaluator(BinaryClassificationEvaluator):
 
     def __call__(self, model, output_path: str = None, epoch: int = -1, steps: int = -1) -> float:
         super().__call__(model, output_path, epoch, steps)
-        return self.compute_ce_score(model)
+        ce, acc = self.compute_ce_score(model)
+        print('epoch{:d} step{:d}: ce_loss{:.2f}, acc{:.2f}'.format(epoch, steps, ce, acc*100))
+        return ce
 
-    def compute_ce_score(self, model) -> float:
+    def compute_ce_score(self, model):
         device = model.device
         sentences = list(set(self.sentences1 + self.sentences2))
         embeddings = model.encode(sentences, batch_size=self.batch_size, show_progress_bar=self.show_progress_bar,
@@ -128,31 +133,37 @@ class myEvaluator(BinaryClassificationEvaluator):
             self.loss_model.device = device
 
         _ce_list = list()
+        _pred_list = list()
         with torch.no_grad():
-            for start_index in trange(0, len(sentences), self.batch_size, desc="Batches", disable=not self.show_progress_bar):
+            for start_index in trange(0, len(sentences), self.batch_size, desc="Batches",
+                                      disable=not self.show_progress_bar):
                 _batch = cated_input[start_index:start_index + self.batch_size]
                 _label = labels[start_index:start_index + self.batch_size]
                 _batch_tensor = torch.from_numpy(_batch).to(device)
                 _label_tensor = torch.from_numpy(_label).to(device)
                 _logits_tensor = self.loss_model.classifier(_batch_tensor)
-                _ce_scores = F.cross_entropy(_logits_tensor, _label_tensor, reduction='none').detach().cpu().numpy()
-                _ce_list.append(_ce_scores)
+                _pred_tensor = torch.argmax(_logits_tensor, dim=-1)
+                _pred_list.append(_pred_tensor.detach().cpu().numpy())
+                _ce_scores = F.cross_entropy(_logits_tensor, _label_tensor, reduction='none')
+                _ce_list.append(_ce_scores.detach().cpu().numpy())
         _ce_list = np.stack(_ce_list)
-        output_scores = np.mean(_ce_list)
+        _pred_list = np.stack(_pred_list)
+        ce = np.mean(_ce_list)
+        acc = np.sum(_pred_list == labels) / len(labels)
 
-        print(output_scores)
-
-        return float(output_scores)
+        return float(ce), float(acc)
 
 
 def get_callback_save_fn(loss_model, outpath):
     folder, fn = os.path.split(outpath)
     savepath = os.path.join(folder, 'model_part2.pt')
     loss_model.best_score = float('inf')
+
     def _callback(score, epoch, steps):
         if score < loss_model.best_score:
             loss_model.best_score = score
             torch.save(loss_model, savepath)
+
     return _callback
 
 
@@ -166,8 +177,9 @@ if __name__ == '__main__':
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
 
     train_loss.set_train_classifier()
-    myevaluator=myEvaluator(['My first sentence'], ['My second sentence'], [0], loss_model=train_loss, batch_size=16)
+    myevaluator = myEvaluator(['My first sentence'], ['My second sentence'], [0], loss_model=train_loss, batch_size=16)
 
     outpath = '../data/model_part1.pt'
     callback_fn = get_callback_save_fn(train_loss, outpath=outpath)
-    model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0, output_path='all_part1.pt', evaluator=myevaluator, evaluation_steps=1, callback=callback_fn)
+    model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0, output_path='all_part1.pt',
+              evaluator=myevaluator, evaluation_steps=1, callback=callback_fn)
