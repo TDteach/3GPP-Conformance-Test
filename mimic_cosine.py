@@ -172,9 +172,10 @@ def get_callback_save_fn(loss_model, outpath):
     loss_model.best_score = float('inf')
 
     def _callback(score, epoch, steps):
-        if score < loss_model.best_score:
+        if score > loss_model.best_score:
             loss_model.best_score = score
             torch.save(loss_model, savepath)
+            print('save to', savepath)
 
     return _callback
 
