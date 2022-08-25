@@ -147,7 +147,7 @@ class myEvaluator(BinaryClassificationEvaluator):
 
 def get_callback_save_fn(loss_model, outpath):
     folder, fn = os.path.split(outpath)
-    savepath = os.path.join(folder, 'all_part2.pt')
+    savepath = os.path.join(folder, 'model_part2.pt')
     loss_model.best_score = float('inf')
     def _callback(score, epoch, steps):
         if score < loss_model.best_score:
@@ -167,5 +167,7 @@ if __name__ == '__main__':
 
     train_loss.set_train_classifier()
     myevaluator=myEvaluator(['My first sentence'], ['My second sentence'], [0], loss_model=train_loss, batch_size=16)
-    callback_fn = get_callback_save_fn(train_loss)
+
+    outpath = '../data/model_part1.pt'
+    callback_fn = get_callback_save_fn(train_loss, outpath=outpath)
     model.fit(train_objectives=[(train_dataloader, train_loss)], epochs=1, warmup_steps=0, output_path='all_part1.pt', evaluator=myevaluator, evaluation_steps=1, callback=callback_fn)
