@@ -147,7 +147,7 @@ class myEvaluator(BinaryClassificationEvaluator):
         _ce_list = list()
         _pred_list = list()
         with torch.no_grad():
-            for start_index in trange(0, len(sentences), self.batch_size, desc="Batches",
+            for start_index in trange(0, len(cated_input), self.batch_size, desc="Batches",
                                       disable=not self.show_progress_bar):
                 _batch = cated_input[start_index:start_index + self.batch_size]
                 _label = labels[start_index:start_index + self.batch_size]
@@ -158,8 +158,8 @@ class myEvaluator(BinaryClassificationEvaluator):
                 _pred_list.append(_pred_tensor.detach().cpu().numpy())
                 _ce_scores = F.cross_entropy(_logits_tensor, _label_tensor, reduction='none')
                 _ce_list.append(_ce_scores.detach().cpu().numpy())
-        _ce_list = np.stack(_ce_list)
-        _pred_list = np.stack(_pred_list)
+        _ce_list = np.concatenate(_ce_list, axis=-1)
+        _pred_list = np.concatenate(_pred_list, axis=-1)
         ce = np.mean(_ce_list)
         acc = np.sum(_pred_list == labels) / len(labels)
 
