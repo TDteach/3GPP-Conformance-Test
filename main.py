@@ -228,6 +228,7 @@ def split_main_part(verb_dict, tokens):
         i += 1
     temp = ' '.join(temp)
 
+    print("xzsewwwwwwwwwwwwwww")
     print(temp)
 
     for stag in stag_loc_map:
@@ -240,9 +241,10 @@ def split_main_part(verb_dict, tokens):
         non_conj_child = list()
         for ch in tree.children[0].children:
             if ch.label == 'CC':
-                conj = ch.label
+                conj = ch.leaf_labels()[0]
             else:
                 non_conj_child.append(ch)
+        print(conj)
         if conj is None:
             stag_loc_map[stag] = ('and', [' '.join(_tokens)])
         else:
@@ -817,7 +819,9 @@ def test_single_sentence():
     # sent = 'When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.'
 
     sent = 'In state EMM-DEREGISTERED, the UE initiates the attach procedure by sending an ATTACH REQUEST message to the MME, starting timer T3410 and entering state EMM-REGISTERED-INITIATED.'
-    sent = 'Upon expiry of timer T3247, the UE shall initiate an EPS attach procedure or tracking area updating procedure, if still needed, dependent on EMM state and EPS update status, or perform PLMN selection according to 3GPP TS 23.122.'
+    # sent = 'Upon expiry of timer T3247, the UE shall initiate an EPS attach procedure or tracking area updating procedure, if still needed, dependent on EMM state and EPS update status, or perform PLMN selection according to 3GPP TS 23.122.'
+    sent = 'The UE shall start the attach procedure and detach procedure'
+
 
     # sent = 'If running, the timer should stops.'
     # sent = ' I am a boy who plays football.'
@@ -867,7 +871,7 @@ def test_paras():
 
 
 if __name__ == '__main__':
-    # test_single_sentence()
+    test_single_sentence()
     test_paras()
     main()
 
