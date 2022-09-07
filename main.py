@@ -228,6 +228,7 @@ def split_main_part(verb_dict, tokens):
         i += 1
     temp = ' '.join(temp)
 
+    print("xzsewwwwwwwwwwwwwww")
     print(temp)
 
     for stag in stag_loc_map:
@@ -240,9 +241,10 @@ def split_main_part(verb_dict, tokens):
         non_conj_child = list()
         for ch in tree.children[0].children:
             if ch.label == 'CC':
-                conj = ch.label
+                conj = ch.leaf_labels()[0]
             else:
                 non_conj_child.append(ch)
+        print(conj)
         if conj is None:
             stag_loc_map[stag] = ('and', [' '.join(_tokens)])
         else:
@@ -560,6 +562,11 @@ def build_tree_from_sent(sent):
     print('*********************semantic role labeling end***********************')
 
     print('*********************build SRL tree start***********************')
+    new_verb_dicts = list()
+    for verb_dict in verb_dicts:
+        if verb_dict['verb_k'] is not None:
+            new_verb_dicts.append(verb_dict)
+    verb_dicts = new_verb_dicts
     verb_dicts.sort(reverse=True, key=lambda z: (len(z['related_words']), -z['verb_k']))
 
     root = build_node([0, len(tokens)])
@@ -717,10 +724,10 @@ def generate_graph_from_paras(para_list):
 
             hashv = hash(sent['sent'])
             if hashv not in sents_record:
-                try:
-                    tree_root = build_tree_from_sent(sent['sent'])
-                except:
-                    continue
+                # try:
+                tree_root = build_tree_from_sent(sent['sent'])
+                # except:
+                #     continue
                 sents_record[hashv] = tree_root
             else:
                 tree_root = sents_record[hashv]
@@ -816,8 +823,11 @@ def test_single_sentence():
     # sent = 'Furthermore, the MME may, send a SERVICE ACCEPT message to complete the service request procedure, if no NAS security mode control procedure was initiated, the MME did not send a SERVICE ACCEPT message as specified above to perform an EPS bearer context status synchronization, and the MME did not initiate any of the procedures specified in item 1 to 4 above.'
     # sent = 'When the MME and the UE create an EPS security context using null integrity and null ciphering algorithm during an attach procedure for emergency bearer services , or a tracking area updating procedure for a UE that has a PDN connection for emergency bearer services, the MME and the UE shall delete the previous current EPS security context.'
 
-    sent = 'In state EMM-DEREGISTERED, the UE initiates the attach procedure by sending an ATTACH REQUEST message to the MME, starting timer T3410 and entering state EMM-REGISTERED-INITIATED.'
-    sent = 'Upon expiry of timer T3247, the UE shall initiate an EPS attach procedure or tracking area updating procedure, if still needed, dependent on EMM state and EPS update status, or perform PLMN selection according to 3GPP TS 23.122.'
+    sent = 'In state EMM-DEREGISTERED, the UE initiates the attach procedure by sending an ATTACH REQUEST message to the MME, starting timer T3410 and entering state EMM-REGISTERED-INITIATED which is provided by the UE.'
+    # sent = 'Upon expiry of timer T3247, the UE shall initiate an EPS attach procedure or tracking area updating procedure, if still needed, dependent on EMM state and EPS update status, or perform PLMN selection according to 3GPP TS 23.122.'
+    # sent = 'The UE shall start the attach procedure and detach procedure'
+    sent = 'Upon receipt of EMM cause #99, #100, or #111, the UE shall start the attach procedure or send a message to the MME when the UE receives an ATTACH REQUEST message and the message is without integrity protection'
+
 
     # sent = 'If running, the timer should stops.'
     # sent = ' I am a boy who plays football.'
@@ -867,7 +877,7 @@ def test_paras():
 
 
 if __name__ == '__main__':
-    # test_single_sentence()
+    test_single_sentence()
     test_paras()
     main()
 

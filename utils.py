@@ -198,7 +198,7 @@ def exchange_nn_with_ving(sent, tokens):
             i += 1
         i += len(token)
         if token.lower() in NN_VING_map:
-            tokens[k] = NN_VING_map[token]
+            tokens[k] = NN_VING_map[token.lower()]
         a.append(tokens[k])
         ntokens.append(tokens[k])
     nsent = ''.join(a)
