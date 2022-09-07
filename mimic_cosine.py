@@ -2,6 +2,7 @@ from collections import OrderedDict
 import os
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from sentence_transformers import SentenceTransformer, InputExample, models, losses
 from sentence_transformers.evaluation import BinaryClassificationEvaluator
@@ -19,30 +20,40 @@ class CosineMimicLoss(torch.nn.Module):
         self.model = model
         self.device = model.device
         self.feature_dim = feature_dim
-        self.classifier = self.get_classifier(feature_dims=[512, 256])
+        self.embedding = self.get_mlp_model(input_dims=feature_dim*2, feature_dims=[512,256])
+        self.classifier = self.get_mlp_model(input_dims=256, feature_dims=[128,4])
+        self.regression = self.get_mlp_model(input_dims=256, feature_dims=[128,1])
         self.mode = 0
         self.train_classifier_only = False
+        self.info_gain = 1e-2
 
-    def get_classifier(self, feature_dims: Iterable[int]):
+        parallel_gpus = True
+        if parallel_gpus:
+            self.model = nn.DataParallel(self.model)
+            self.embedding = nn.DataParallel(self.embedding)
+            self.classifier = nn.DataParallel(self.classifier)
+            self.regression = nn.DataParallel(self.regression)
+
+    def get_mlp_model(self, input_dims:int, feature_dims: Iterable[int]):
         list_layer = list()
-        last_dim = self.feature_dim * 2
+        last_dim = input_dims
         for i, dim in enumerate(feature_dims):
             fn = torch.nn.Linear(in_features=last_dim, out_features=dim)
             list_layer.append(('fn{:d}'.format(i + 1), fn))
             relu = torch.nn.ReLU()
             list_layer.append(('relu{:d}'.format(i + 1), relu))
             last_dim = dim
-        fn = torch.nn.Linear(in_features=last_dim, out_features=4)
-        list_layer.append(('fn{:d}'.format(len(feature_dims) + 1), fn))
-        _module = torch.nn.Sequential(OrderedDict(list_layer))
-        _module = _module.to(self.device)
+        _module = torch.nn.Sequential(OrderedDict(list_layer)).to(self.device)
         return _module
 
-    def set_train_classifier(self):
+    def set_train_cosine(self):
         self.mode = 1
 
-    def set_train_all(self):
+    def set_train_dual(self):
         self.mode = 2
+
+    def set_train_dual_and_regression(self):
+        self.mode = 3
 
     def set_predict(self):
         self.mode = 0
@@ -55,12 +66,9 @@ class CosineMimicLoss(torch.nn.Module):
         self.train_classifier_only = False
 
     def forward(self, sentence_features: Iterable[Dict[str, Tensor]], labels: Tensor = None):
-        return_reps = False
         if self.mode == 1:
-            return_reps = True
-        outputs = self._forward(sentence_features, return_reps)
+            outputs = self._forward(sentence_features, return_reps=True)
 
-        if self.mode == 1:
             outputs, reps0, reps1 = outputs
             cosine_value: Tensor = torch.cosine_similarity(reps0, reps1)
             cosine_value = cosine_value / 2.0 + 0.5
@@ -72,15 +80,54 @@ class CosineMimicLoss(torch.nn.Module):
             loss = torch.nn.functional.cross_entropy(outputs, targets.data)
             return loss
         elif self.mode == 2:
-            loss = torch.nn.functional.cross_entropy(outputs, labels)
-            return loss
+            outputs, output2 = self._forward(sentence_features, return_dual=True)
+
+            idx2 = labels.eq(2)
+            idx3 = labels.eq(3)
+
+            label2 = labels.clone()
+            label2[idx2] = 3
+            label2[idx3] = 2
+
+            loss1 = F.cross_entropy(outputs, labels)
+            loss2 = F.cross_entropy(output2, label2)
+
+            return loss1+loss2/2.0
+
+        elif self.mode == 3:
+            outputs, s1, output2, s2 = self._forward(sentence_features, return_dual=True, return_regr=True)
+
+            idx0 = labels.eq(0)
+            idx1 = labels.eq(1)
+            idx2 = labels.eq(2)
+            idx3 = labels.eq(3)
+
+            label2 = labels.clone()
+            label2[idx2] = 3
+            label2[idx3] = 2
+
+            loss1 = F.cross_entropy(outputs, labels)
+            loss2 = F.cross_entropy(output2, label2)
+            loss_ce = loss1+loss2/2.0
+
+            loss_sc = 0
+            gain = self.info_gain
+
+            loss_sc += torch.sum(F.relu(s1[idx0]-gain) *4 + F.relu(s2[idx0]-gain) *4)
+            loss_sc += torch.sum(F.relu(1-s1[idx1]) *4 + F.relu(1-s2[idx1]) *4)
+            loss_sc += torch.sum(F.relu(gain-s1[idx2]) *3 + F.relu(1-s2[idx2]) *3 + F.relu(s1[idx2]-(s2[idx2].data-gain)) *2)
+            loss_sc += torch.sum(F.relu(1-s1[idx3]) *3 + F.relu(gain-s2[idx3]) *3 + F.relu(s2[idx3]-(s1[idx3].data-gain)) *2)
+            loss_sc /= 8*len(s1)
+
+            return loss_ce + 0e-2 * loss_sc
         elif self.mode == 0:
+            outputs = self._forward(sentence_features)
             outputs = F.softmax(outputs, dim=-1)
             return outputs
         else:
             raise NotImplementedError
 
-    def _forward(self, sentence_features: Iterable[Dict[str, Tensor]], return_reps: bool = False):
+    def _forward(self, sentence_features: Iterable[Dict[str, Tensor]], return_reps: bool = False, return_dual: bool = False, return_regr: bool = False):
         if self.train_classifier_only and self.model.training:
             self.model.eval()
 
@@ -88,12 +135,33 @@ class CosineMimicLoss(torch.nn.Module):
         assert len(reps) == 2
 
         cated_input: Tensor = torch.cat((reps[0], reps[1]), dim=1)
-
         if self.train_classifier_only:
             cated_input = cated_input.data
+        embeddings = self.embedding(cated_input)
+        outputs = self.classifier(embeddings)
 
-        outputs = self.classifier(cated_input)
-        return outputs
+        if return_dual:
+            dual_input: Tensor = torch.cat((reps[1], reps[0]), dim=1)
+            if self.train_classifier_only:
+                dual_input = dual_input.data
+            embedding2 = self.embedding(dual_input)
+            output2 = self.classifier(embedding2)
+
+            if return_regr:
+                s1 = self.regression(embeddings)
+                s1 = torch.tanh(s1)
+                s2 = self.regression(embedding2)
+                s2 = torch.tanh(s2)
+                return outputs, s1, output2, s2
+            else:
+                return outputs, output2
+        else:
+            if return_regr:
+                s1 = self.regression(embeddings)
+                s1 = torch.tanh(s1)
+                return outputs, s1
+            else:
+                return outputs
 
 
 logger = logging.getLogger(__name__)
@@ -120,10 +188,13 @@ class myEvaluator(BinaryClassificationEvaluator):
 
         self.loss_model = loss_model
 
+        self.best_acc = float('-inf')
+
     def __call__(self, model, output_path: str = None, epoch: int = -1, steps: int = -1) -> float:
         ce, acc = self.compute_ce_score(model)
         print('epoch{:d} step{:d}: ce_loss{:.2f}, acc{:.2f}'.format(epoch, steps, ce, acc*100))
-        return -ce
+
+        return acc*100-ce
 
     def compute_ce_score(self, model):
         device = model.device
@@ -153,7 +224,10 @@ class myEvaluator(BinaryClassificationEvaluator):
                 _label = labels[start_index:start_index + self.batch_size]
                 _batch_tensor = torch.from_numpy(_batch).to(device)
                 _label_tensor = torch.from_numpy(_label).to(device)
-                _logits_tensor = self.loss_model.classifier(_batch_tensor)
+
+                _embedding_tensor = self.loss_model.embedding(_batch_tensor)
+                _logits_tensor = self.loss_model.classifier(_embedding_tensor)
+
                 _pred_tensor = torch.argmax(_logits_tensor, dim=-1)
                 _pred_list.append(_pred_tensor.detach().cpu().numpy())
                 _ce_scores = F.cross_entropy(_logits_tensor, _label_tensor, reduction='none')
@@ -189,7 +263,7 @@ if __name__ == '__main__':
                       InputExample(texts=['Another pair', 'Unrelated sentence'], label=2)]
     train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
 
-    train_loss.set_train_classifier()
+    train_loss.set_train_cosine()
     myevaluator = myEvaluator(['My first sentence'], ['My second sentence'], [0], loss_model=train_loss, batch_size=16)
 
     outpath = '../data/model_part1.pt'
