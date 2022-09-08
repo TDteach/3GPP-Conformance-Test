@@ -26,10 +26,10 @@ def compute_kl_loss(p: Tensor, q: Tensor):
 
 
 class CosineMimicLoss(torch.nn.Module):
-    def __init__(self, model: SentenceTransformer, feature_dim: int, parallel: bool = True):
+    def __init__(self, model: SentenceTransformer, feature_dim: int, parallel: bool = False):
         super(CosineMimicLoss, self).__init__()
         self.model = model
-        self.device = model.device
+        self._target_device = model._target_device
         self.feature_dim = feature_dim
         self.embedding = self.get_mlp_model(input_dims=feature_dim*2, feature_dims=[512,256])
         self.classifier = self.get_mlp_model(input_dims=256, feature_dims=[256,4])
@@ -58,7 +58,7 @@ class CosineMimicLoss(torch.nn.Module):
             relu = torch.nn.ReLU()
             list_layer.append(('relu{:d}'.format(i + 1), relu))
             last_dim = dim
-        _module = torch.nn.Sequential(OrderedDict(list_layer)).to(self.device)
+        _module = torch.nn.Sequential(OrderedDict(list_layer)).to(self._target_device)
         return _module
 
     def set_train_cosine(self):
@@ -250,7 +250,7 @@ class myEvaluator(BinaryClassificationEvaluator):
         return acc*100-ce
 
     def compute_ce_score(self, model, return_probs=False):
-        device = 'cuda'
+        device = model._target_device
         sentences = list(set(self.sentences1 + self.sentences2))
         model.eval()
         with torch.no_grad():
@@ -265,10 +265,6 @@ class myEvaluator(BinaryClassificationEvaluator):
             cated_input.append(np.concatenate((emb1, emb2), axis=-1))
         cated_input = np.stack(cated_input)
         labels = np.asarray(self.labels)
-
-        if self.loss_model.device != device:
-            self.loss_model.to(device)
-            self.loss_model.device = device
 
         _ce_list = list()
         _pred_list = list()
