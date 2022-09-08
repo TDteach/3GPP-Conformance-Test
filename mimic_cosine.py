@@ -249,11 +249,13 @@ class myEvaluator(BinaryClassificationEvaluator):
 
         return acc*100-ce
 
-    def compute_ce_score(self, model):
-        device = model.device
+    def compute_ce_score(self, model, return_probs=False):
+        device = 'cuda'
         sentences = list(set(self.sentences1 + self.sentences2))
-        embeddings = model.encode(sentences, batch_size=self.batch_size, show_progress_bar=self.show_progress_bar,
-                                  convert_to_numpy=True)
+        model.eval()
+        with torch.no_grad():
+            embeddings = model.encode(sentences, batch_size=self.batch_size, show_progress_bar=self.show_progress_bar,
+                                      convert_to_numpy=True)
         emb_dict = {sent: emb for sent, emb in zip(sentences, embeddings)}
         embeddings1 = [emb_dict[sent] for sent in self.sentences1]
         embeddings2 = [emb_dict[sent] for sent in self.sentences2]
@@ -270,6 +272,10 @@ class myEvaluator(BinaryClassificationEvaluator):
 
         _ce_list = list()
         _pred_list = list()
+        if return_probs:
+            _probs_list = list()
+
+        self.loss_model.eval()
         with torch.no_grad():
             for start_index in trange(0, len(cated_input), self.batch_size, desc="Batches",
                                       disable=not self.show_progress_bar):
@@ -281,14 +287,23 @@ class myEvaluator(BinaryClassificationEvaluator):
                 _embedding_tensor = self.loss_model.embedding(_batch_tensor)
                 _logits_tensor = self.loss_model.classifier(_embedding_tensor)
 
+                if return_probs:
+                    _probs_tensor = F.softmax(_logits_tensor, dim=-1)
+                    _probs_list.append(_probs_tensor.detach().cpu().numpy())
+
                 _pred_tensor = torch.argmax(_logits_tensor, dim=-1)
                 _pred_list.append(_pred_tensor.detach().cpu().numpy())
                 _ce_scores = F.cross_entropy(_logits_tensor, _label_tensor, reduction='none')
                 _ce_list.append(_ce_scores.detach().cpu().numpy())
         _ce_list = np.concatenate(_ce_list, axis=-1)
         _pred_list = np.concatenate(_pred_list, axis=-1)
+        if return_probs:
+            _probs_list = np.concatenate(_probs_list, axis=-1)
         ce = np.mean(_ce_list)
         acc = np.sum(_pred_list == labels) / len(labels)
+
+        if return_probs:
+            return float(ce), float(acc), _probs_list, _pred_list, labels
 
         return float(ce), float(acc)
 
