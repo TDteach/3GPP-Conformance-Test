@@ -26,7 +26,7 @@ def compute_kl_loss(p: Tensor, q: Tensor):
 
 
 class CosineMimicLoss(torch.nn.Module):
-    def __init__(self, model: SentenceTransformer, feature_dim: int):
+    def __init__(self, model: SentenceTransformer, feature_dim: int, parallel: bool = True):
         super(CosineMimicLoss, self).__init__()
         self.model = model
         self.device = model.device
@@ -38,8 +38,8 @@ class CosineMimicLoss(torch.nn.Module):
         self.train_classifier_only = False
         self.info_gain = 1e-2
 
-        parallel_gpus=True
-        if parallel_gpus:
+        self.parallel = parallel
+        if parallel:
             self.model = nn.DataParallel(self.model)
             self.embedding = nn.DataParallel(self.embedding)
             self.classifier = nn.DataParallel(self.classifier)
