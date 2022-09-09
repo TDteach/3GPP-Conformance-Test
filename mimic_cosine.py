@@ -53,7 +53,7 @@ class CosineMimicLoss(torch.nn.Module):
             fn = torch.nn.Linear(in_features=last_dim, out_features=dim)
             list_layer.append(('fn{:d}'.format(i + 1), fn))
             if i == 0:
-                dropout = torch.nn.Dropout(p=0.3)
+                dropout = torch.nn.Dropout(p=0.4)
                 list_layer.append(('dropout{:d}'.format(i + 1), dropout))
             relu = torch.nn.ReLU()
             list_layer.append(('relu{:d}'.format(i + 1), relu))
@@ -304,7 +304,7 @@ class myEvaluator(BinaryClassificationEvaluator):
         return float(ce), float(acc)
 
 
-def get_callback_save_fn(loss_model, outpath, demo_fn=None):
+def get_callback_save_fn(loss_model, outpath, demo_fn=None, seed=None):
     folder, fn = os.path.split(outpath)
     savepath = os.path.join(folder, 'model_part2.pt')
     loss_model.best_score = float('-inf')
@@ -313,6 +313,12 @@ def get_callback_save_fn(loss_model, outpath, demo_fn=None):
         if score > loss_model.best_score:
             loss_model.best_score = score
             torch.save(loss_model, savepath)
+
+            if score > 85:
+                storepath, ext = os.path.splitext(savepath)
+                storepath += '_{:.2f}_{}.pt'.format(score, seed);
+                torch.save(loss_model, storepath)
+
             print('update best_score to', loss_model.best_score, 'save loss_model to', savepath)
             if demo_fn:
                 demo_fn()
